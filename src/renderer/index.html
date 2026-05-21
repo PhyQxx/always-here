@@ -105,7 +105,7 @@
       <div class="settings-tab-content" data-tab-content="pet">
         <div class="settings-section-title" data-settings-scope="pet">宠物管理器</div>
         <div class="pet-manager-list" id="pet-manager-list" data-settings-scope="pet"></div>
-        
+
         <div class="settings-section-title" data-settings-scope="pet">库设置</div>
         <div class="setting-row pet-folder-row" data-settings-scope="pet">
           <div class="setting-label">宠物文件夹</div>
@@ -117,8 +117,8 @@
         <div class="setting-row pet-package-row" data-settings-scope="pet">
           <div class="setting-label">导入宠物</div>
           <div class="setting-controls">
-            <button type="button" id="pet-package-import" class="btn-sm">导入 .zip 包</button>
             <a href="https://codex-pets.net/" id="pet-download-link" class="link-sm">下载更多</a>
+            <button type="button" id="pet-package-import" class="btn-sm">导入 .zip 包</button>
           </div>
           <div id="pet-package-import-status" class="status-text"></div>
         </div>
@@ -154,7 +154,7 @@
             <label class="sub-label"><input type="checkbox" id="reminder-hourly-notify"> 系统通知</label>
           </div>
         </div>
-        
+
         <div class="reminder-group" data-settings-scope="pet">
           <div class="setting-row" data-settings-scope="pet">
             <label><input type="checkbox" id="reminder-water-enabled"> 喝水提醒</label>
@@ -268,7 +268,10 @@
             <div id="app-version" class="version-text">v0.0.0</div>
             <div class="version-label">当前版本</div>
           </div>
-          <button id="check-update-btn" class="btn-primary">检查更新</button>
+          <div class="setting-controls">
+            <button id="check-update-btn" class="btn-primary">检查更新</button>
+            <button id="reset-config-btn" class="btn-primary danger-red">恢复默认</button>
+          </div>
         </div>
       </div>
 

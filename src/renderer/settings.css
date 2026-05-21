@@ -290,9 +290,14 @@
   transition: all 0.2s;
 }
 
-.btn-sm:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: var(--accent);
+.btn-sm.danger {
+  color: #ff4d4f;
+  border-color: rgba(255, 77, 79, 0.2);
+}
+
+.btn-sm.danger:hover {
+  background: rgba(255, 77, 79, 0.1);
+  border-color: #ff4d4f;
 }
 
 .btn-block {
@@ -322,6 +327,18 @@
   color: white;
   cursor: pointer;
   font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-primary.danger-red {
+  background: rgba(220, 53, 69, 0.15);
+  color: #ff4d4f;
+  border: 1px solid rgba(255, 77, 79, 0.3);
+}
+
+.btn-primary.danger-red:hover {
+  background: #ff4d4f;
+  color: white;
 }
 
 .input-sm {
@@ -429,6 +446,11 @@
   gap: 6px;
 }
 
+.pet-package-row .setting-controls {
+  justify-content: flex-end;
+  flex: 1;
+}
+
 .pet-card-btn {
   padding: 5px 8px;
   font-size: 11px;
@@ -438,7 +460,9 @@
   color: white;
   cursor: pointer;
   transition: all 0.2s;
-  flex: 1;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-width: 44px;
   text-align: center;
 }
 

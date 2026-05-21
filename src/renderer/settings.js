@@ -25,6 +25,7 @@ export function initSettings(getConfig, saveConfig) {
   const petSelect = document.getElementById('setting-pet-select')
   const versionSpan = document.getElementById('app-version')
   const updateBtn = document.getElementById('check-update-btn')
+  const resetConfigBtn = document.getElementById('reset-config-btn')
 
   // Load version
   window.alwaysHere.getAppVersion().then(version => {
@@ -45,6 +46,21 @@ export function initSettings(getConfig, saveConfig) {
     } finally {
       updateBtn.textContent = originalText
       updateBtn.disabled = false
+    }
+  })
+
+  resetConfigBtn?.addEventListener('click', async () => {
+    const confirmed = await showConfirm('确定要恢复出厂设置吗？这将重置所有组件位置和您的个性化配置（如薪资、提醒等）。')
+    if (!confirmed) return
+
+    const success = await window.alwaysHere.resetConfig()
+    if (success) {
+      showToast('配置已重置，正在重启...', 'success')
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    } else {
+      showToast('恢复默认配置失败', 'error')
     }
   })
 

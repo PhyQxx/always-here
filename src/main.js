@@ -285,6 +285,14 @@ ipcMain.handle('delete-pet', async (_, petId) => {
   return false
 })
 ipcMain.handle('get-app-version', () => app.getVersion())
+ipcMain.handle('reset-config', () => {
+  try {
+    saveConfig(DEFAULT_CONFIG)
+    return true
+  } catch (e) {
+    return false
+  }
+})
 
 ipcMain.handle('check-hot-update', async () => {
   if (!app.isPackaged) return { error: '开发环境不支持热更新' }
