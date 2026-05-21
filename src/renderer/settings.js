@@ -8,6 +8,7 @@ import {
   getSettingsTitle,
   isSettingsRowVisible
 } from './settingsScopes.mjs'
+import { normalizePetChatSettings } from './widgets/petChatter.mjs'
 
 export function initSettings(getConfig, saveConfig) {
   const panel = document.getElementById('settings-panel')
@@ -96,6 +97,7 @@ export function initSettings(getConfig, saveConfig) {
   initPetSelect(petSelect, getConfig, saveConfig)
   initPetFolder(getConfig, saveConfig)
   initReminderSettings(getConfig, saveConfig)
+  initPetChatSettings(getConfig, saveConfig)
   initActivityPanel(getConfig)
 }
 
@@ -198,6 +200,42 @@ function initReminderSettings(getConfig, saveConfig) {
         detail: { type, prop }
       }))
     })
+  })
+}
+
+function initPetChatSettings(getConfig, saveConfig) {
+  const enabledEl = document.getElementById('pet-chat-enabled')
+  const intervalEl = document.getElementById('pet-chat-interval')
+  const quietEl = document.getElementById('pet-chat-quiet')
+  if (!enabledEl || !intervalEl || !quietEl) return
+
+  const config = getConfig()
+  config.petChat = normalizePetChatSettings(config.petChat)
+
+  function render() {
+    const settings = normalizePetChatSettings(config.petChat)
+    enabledEl.checked = settings.enabled
+    intervalEl.value = settings.intervalMinutes
+    intervalEl.disabled = !settings.enabled || settings.quietMode
+    quietEl.checked = settings.quietMode
+  }
+
+  async function persist(nextSettings) {
+    config.petChat = normalizePetChatSettings(nextSettings)
+    render()
+    await saveConfig()
+    window.dispatchEvent(new CustomEvent('pet-chat-settings-changed'))
+  }
+
+  render()
+  enabledEl.addEventListener('change', () => {
+    persist({ ...config.petChat, enabled: enabledEl.checked })
+  })
+  intervalEl.addEventListener('change', () => {
+    persist({ ...config.petChat, intervalMinutes: intervalEl.value })
+  })
+  quietEl.addEventListener('change', () => {
+    persist({ ...config.petChat, quietMode: quietEl.checked })
   })
 }
 

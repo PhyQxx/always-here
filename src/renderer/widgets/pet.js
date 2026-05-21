@@ -17,7 +17,8 @@ import {
 } from './petReminderBubble.mjs'
 import {
   PET_CHAT_BUBBLE_DURATION_MS,
-  PET_CHAT_INTERVAL_MS,
+  getPetChatIntervalMs,
+  normalizePetChatSettings,
   pickPetChatLine,
   shouldShowPetChat
 } from './petChatter.mjs'
@@ -194,9 +195,12 @@ function startReminderLoop() {
 }
 
 function showPetChat() {
+  const chatSettings = normalizePetChatSettings(getConfigFn().petChat)
   const bubble = document.getElementById('pet-bubble')
   const bubbleVisible = bubble ? !bubble.classList.contains('hidden') : false
   if (!shouldShowPetChat({
+    enabled: chatSettings.enabled,
+    quietMode: chatSettings.quietMode,
     hasPendingReminder: Boolean(pendingReminderEvent),
     bubbleVisible
   })) return
@@ -207,7 +211,13 @@ function showPetChat() {
 
 function startPetChatLoop() {
   if (chatTimer) clearInterval(chatTimer)
-  chatTimer = setInterval(showPetChat, PET_CHAT_INTERVAL_MS)
+  const chatSettings = normalizePetChatSettings(getConfigFn().petChat)
+  getConfigFn().petChat = chatSettings
+  if (!chatSettings.enabled || chatSettings.quietMode) {
+    chatTimer = null
+    return
+  }
+  chatTimer = setInterval(showPetChat, getPetChatIntervalMs(chatSettings))
 }
 
 function scheduleAmbientAction(delay = randomActionDelay()) {
@@ -270,6 +280,10 @@ export async function initPet(getConfig, saveConfig) {
     if (event.detail?.type === 'water') reminderState.lastWaterAt = now
     if (event.detail?.type === 'sedentary') reminderState.lastSedentaryAt = now
     checkReminders()
+  })
+
+  window.addEventListener('pet-chat-settings-changed', () => {
+    startPetChatLoop()
   })
 
   window.addEventListener('pet-reminder', (event) => {

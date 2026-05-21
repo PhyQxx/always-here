@@ -116,6 +116,15 @@
       <label><input type="checkbox" id="reminder-work-enabled"> 工作时间提醒</label>
       <label><input type="checkbox" id="reminder-work-notify"> 系统通知</label>
     </div>
+    <div class="setting-row reminders-row" data-settings-scope="pet">
+      <label><input type="checkbox" id="pet-chat-enabled"> 宠物闲聊</label>
+      <input type="number" id="pet-chat-interval" min="1" max="60" step="1">
+      <span>分钟</span>
+    </div>
+    <div class="setting-row reminders-row" data-settings-scope="pet">
+      <label><input type="checkbox" id="pet-chat-quiet"> 安静模式</label>
+      <span>暂停宠物闲聊</span>
+    </div>
     <div class="setting-row" data-settings-scope="pet"><button type="button" id="activity-log-open">行为记录</button></div>
     <div class="setting-row" data-settings-scope="global">
       <label>主题</label>

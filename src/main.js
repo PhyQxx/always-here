@@ -26,6 +26,11 @@ const DEFAULT_CONFIG = {
     sedentary: { enabled: true, intervalMinutes: 60, systemNotification: false },
     work: { enabled: true, systemNotification: false }
   },
+  petChat: {
+    enabled: true,
+    intervalMinutes: 1,
+    quietMode: false
+  },
   happiness: 70,
   noteText: '',
   wageman: {

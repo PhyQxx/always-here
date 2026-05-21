@@ -11,11 +11,35 @@ async function loadPetChatter() {
 test('pet chatter speaks once per minute with a short bubble duration', async () => {
   const {
     PET_CHAT_BUBBLE_DURATION_MS,
-    PET_CHAT_INTERVAL_MS
+    PET_CHAT_INTERVAL_MS,
+    getPetChatIntervalMs,
+    normalizePetChatSettings
   } = await loadPetChatter()
 
   assert.equal(PET_CHAT_INTERVAL_MS, 60 * 1000)
   assert.equal(PET_CHAT_BUBBLE_DURATION_MS, 7000)
+  assert.equal(getPetChatIntervalMs(normalizePetChatSettings({})), 60 * 1000)
+  assert.equal(getPetChatIntervalMs(normalizePetChatSettings({ intervalMinutes: 5 })), 5 * 60 * 1000)
+})
+
+test('pet chatter settings normalize disabled quiet mode and interval bounds', async () => {
+  const { normalizePetChatSettings } = await loadPetChatter()
+
+  assert.deepEqual(normalizePetChatSettings({}), {
+    enabled: true,
+    intervalMinutes: 1,
+    quietMode: false
+  })
+  assert.deepEqual(normalizePetChatSettings({
+    enabled: false,
+    intervalMinutes: 0,
+    quietMode: true
+  }), {
+    enabled: false,
+    intervalMinutes: 1,
+    quietMode: true
+  })
+  assert.equal(normalizePetChatSettings({ intervalMinutes: 90 }).intervalMinutes, 60)
 })
 
 test('pet chatter uses short designed Chinese lines and includes time-of-day flavor', async () => {
@@ -51,4 +75,6 @@ test('pet chatter waits when a reminder or bubble is already visible', async () 
   assert.equal(shouldShowPetChat({ hasPendingReminder: false, bubbleVisible: false }), true)
   assert.equal(shouldShowPetChat({ hasPendingReminder: true, bubbleVisible: false }), false)
   assert.equal(shouldShowPetChat({ hasPendingReminder: false, bubbleVisible: true }), false)
+  assert.equal(shouldShowPetChat({ enabled: false }), false)
+  assert.equal(shouldShowPetChat({ quietMode: true }), false)
 })

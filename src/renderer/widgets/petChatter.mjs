@@ -1,5 +1,38 @@
 export const PET_CHAT_INTERVAL_MS = 60 * 1000
 export const PET_CHAT_BUBBLE_DURATION_MS = 7000
+export const MIN_PET_CHAT_INTERVAL_MINUTES = 1
+export const MAX_PET_CHAT_INTERVAL_MINUTES = 60
+
+export const DEFAULT_PET_CHAT_SETTINGS = {
+  enabled: true,
+  intervalMinutes: 1,
+  quietMode: false
+}
+
+function boolValue(value, fallback) {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function intervalValue(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return DEFAULT_PET_CHAT_SETTINGS.intervalMinutes
+  return Math.min(
+    MAX_PET_CHAT_INTERVAL_MINUTES,
+    Math.max(MIN_PET_CHAT_INTERVAL_MINUTES, Math.round(numeric))
+  )
+}
+
+export function normalizePetChatSettings(input = {}) {
+  return {
+    enabled: boolValue(input.enabled, DEFAULT_PET_CHAT_SETTINGS.enabled),
+    intervalMinutes: intervalValue(input.intervalMinutes),
+    quietMode: boolValue(input.quietMode, DEFAULT_PET_CHAT_SETTINGS.quietMode)
+  }
+}
+
+export function getPetChatIntervalMs(settings = DEFAULT_PET_CHAT_SETTINGS) {
+  return normalizePetChatSettings(settings).intervalMinutes * PET_CHAT_INTERVAL_MS
+}
 
 const BASE_CHAT_LINES = [
   '我在这儿，慢慢来。',
@@ -81,6 +114,11 @@ export function pickPetChatLine({
   return choices[Math.min(index, choices.length - 1)]
 }
 
-export function shouldShowPetChat({ hasPendingReminder = false, bubbleVisible = false } = {}) {
-  return !hasPendingReminder && !bubbleVisible
+export function shouldShowPetChat({
+  enabled = true,
+  quietMode = false,
+  hasPendingReminder = false,
+  bubbleVisible = false
+} = {}) {
+  return enabled && !quietMode && !hasPendingReminder && !bubbleVisible
 }

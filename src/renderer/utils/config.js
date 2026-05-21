@@ -1,4 +1,5 @@
 import { mergeWagemanConfig } from '../widgets/wagemanDefaults.mjs'
+import { normalizePetChatSettings } from '../widgets/petChatter.mjs'
 
 let config = null
 
@@ -26,6 +27,7 @@ export async function initConfig() {
   if (!config.petId) config.petId = 'hina'
   if (!config.petFolderPath) config.petFolderPath = 'C:\\Users\\61759\\.codex\\pets'
   config.reminders = mergeReminders(config.reminders)
+  config.petChat = normalizePetChatSettings(config.petChat)
   config.wageman = mergeWagemanConfig(config.wageman)
   if (config.happiness === undefined) config.happiness = 70
   if (!config.noteText) config.noteText = ''
