@@ -9,9 +9,23 @@
     "build": "electron-builder",
     "test": "node --test"
   },
-  "keywords": [],
+  "keywords": [
+    "electron",
+    "desktop-widget",
+    "desktop-pet",
+    "productivity",
+    "windows"
+  ],
   "author": "",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PhyQxx/always-here.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PhyQxx/always-here/issues"
+  },
+  "homepage": "https://github.com/PhyQxx/always-here#readme",
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0"
