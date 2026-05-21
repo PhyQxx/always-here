@@ -97,8 +97,20 @@ export function initSettings(getConfig, saveConfig) {
   initPetSelect(petSelect, getConfig, saveConfig)
   initPetFolder(getConfig, saveConfig)
   initReminderSettings(getConfig, saveConfig)
-  initPetChatSettings(getConfig, saveConfig)
-  initActivityPanel(getConfig)
+  const petChatSettings = initPetChatSettings(getConfig, saveConfig)
+  const activityPanel = initActivityPanel(getConfig)
+
+  window.alwaysHere.onTrayCommand?.((command) => {
+    if (command === 'pet-say-now') {
+      window.dispatchEvent(new CustomEvent('pet-chat-now'))
+    }
+    if (command === 'toggle-pet-quiet-mode') {
+      petChatSettings?.toggleQuietMode()
+    }
+    if (command === 'show-activity') {
+      activityPanel?.open()
+    }
+  })
 }
 
 async function refreshPetSelect(select, getConfig, saveConfig) {
@@ -237,6 +249,13 @@ function initPetChatSettings(getConfig, saveConfig) {
   quietEl.addEventListener('change', () => {
     persist({ ...config.petChat, quietMode: quietEl.checked })
   })
+
+  return {
+    toggleQuietMode() {
+      const settings = normalizePetChatSettings(config.petChat)
+      return persist({ ...settings, quietMode: !settings.quietMode })
+    }
+  }
 }
 
 function initActivityPanel(getConfig) {
@@ -245,15 +264,21 @@ function initActivityPanel(getConfig) {
   const panel = document.getElementById('activity-panel')
   if (!openBtn || !closeBtn || !panel) return
 
-  openBtn.addEventListener('click', () => {
+  function openActivityPanel() {
     renderActivityPanel(getConfig().activityLog || [])
     panel.classList.remove('hidden')
     window.alwaysHere.setClickThrough(false)
-  })
+  }
+
+  openBtn.addEventListener('click', openActivityPanel)
 
   closeBtn.addEventListener('click', () => {
     panel.classList.add('hidden')
   })
+
+  return {
+    open: openActivityPanel
+  }
 }
 
 function renderActivityPanel(log) {

@@ -194,7 +194,7 @@ function startReminderLoop() {
   reminderTimer = setInterval(checkReminders, 1000)
 }
 
-function showPetChat() {
+function showPetChat(options = {}) {
   const chatSettings = normalizePetChatSettings(getConfigFn().petChat)
   const bubble = document.getElementById('pet-bubble')
   const bubbleVisible = bubble ? !bubble.classList.contains('hidden') : false
@@ -202,7 +202,8 @@ function showPetChat() {
     enabled: chatSettings.enabled,
     quietMode: chatSettings.quietMode,
     hasPendingReminder: Boolean(pendingReminderEvent),
-    bubbleVisible
+    bubbleVisible,
+    force: Boolean(options.force)
   })) return
   lastPetChatLine = pickPetChatLine({ previousLine: lastPetChatLine })
   showBubble(lastPetChatLine, { duration: PET_CHAT_BUBBLE_DURATION_MS })
@@ -284,6 +285,10 @@ export async function initPet(getConfig, saveConfig) {
 
   window.addEventListener('pet-chat-settings-changed', () => {
     startPetChatLoop()
+  })
+
+  window.addEventListener('pet-chat-now', () => {
+    showPetChat({ force: true })
   })
 
   window.addEventListener('pet-reminder', (event) => {

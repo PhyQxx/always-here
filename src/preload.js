@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('alwaysHere', {
   choosePetFolder: () => ipcRenderer.invoke('choose-pet-folder'),
   showNotification: (payload) => ipcRenderer.invoke('show-notification', payload),
   onShowSettings: (callback) => ipcRenderer.on('show-settings', callback),
+  onTrayCommand: (callback) => ipcRenderer.on('tray-command', (_event, command) => callback(command)),
   fetchHolidays: (year) => ipcRenderer.invoke('fetch-holidays', year),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   checkHotUpdate: () => ipcRenderer.invoke('check-hot-update')

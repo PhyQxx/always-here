@@ -70,6 +70,14 @@ function getConfiguredPetFolder() {
 let mainWindow = null
 let tray = null
 
+function sendToRenderer(channel, payload, options = {}) {
+  if (!mainWindow) return
+  if (options.reveal && !mainWindow.isVisible()) {
+    mainWindow.showInactive()
+  }
+  mainWindow.webContents.send(channel, payload)
+}
+
 function createWindow() {
   const { width: screenW, height: screenH } = screen.getPrimaryDisplay().workAreaSize
   const config = loadConfig()
@@ -106,17 +114,9 @@ function createTray() {
   const trayIcon = process.platform === 'win32' ? icon.resize({ width: 16, height: 16 }) : icon
 
   tray = new Tray(trayIcon)
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Always Here', enabled: false },
-    { type: 'separator' },
-    { label: '设置', click: () => { if (mainWindow) mainWindow.webContents.send('show-settings') } },
-    { label: '显示/隐藏', click: () => toggleVisibility() },
-    { type: 'separator' },
-    { label: '退出', click: () => app.quit() }
-  ])
   tray.setToolTip('Always Here')
-  tray.setContextMenu(contextMenu)
   tray.on('click', () => toggleVisibility())
+  refreshTrayMenu()
 }
 
 function toggleVisibility() {
@@ -126,6 +126,41 @@ function toggleVisibility() {
   } else {
     mainWindow.show()
   }
+  refreshTrayMenu()
+}
+
+function refreshTrayMenu() {
+  if (!tray) return
+  const config = loadConfig()
+  const quietMode = Boolean(config.petChat?.quietMode)
+  const isVisible = mainWindow?.isVisible()
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Always Here', enabled: false },
+    { type: 'separator' },
+    {
+      label: '设置',
+      click: () => sendToRenderer('show-settings', null, { reveal: true })
+    },
+    {
+      label: '宠物说一句',
+      click: () => sendToRenderer('tray-command', 'pet-say-now', { reveal: true })
+    },
+    {
+      label: '安静模式',
+      type: 'checkbox',
+      checked: quietMode,
+      click: () => sendToRenderer('tray-command', 'toggle-pet-quiet-mode')
+    },
+    {
+      label: '行为记录',
+      click: () => sendToRenderer('tray-command', 'show-activity', { reveal: true })
+    },
+    { type: 'separator' },
+    { label: isVisible ? '隐藏' : '显示', click: () => toggleVisibility() },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() }
+  ])
+  tray.setContextMenu(contextMenu)
 }
 
 // IPC handlers
@@ -135,6 +170,7 @@ ipcMain.handle('save-config', (_, config) => {
   if (mainWindow) {
     mainWindow.setAlwaysOnTop(config.alwaysOnTop)
   }
+  refreshTrayMenu()
 })
 ipcMain.handle('set-click-through', (_, ignore) => {
   if (mainWindow) {

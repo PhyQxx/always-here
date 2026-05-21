@@ -78,3 +78,18 @@ test('pet chatter waits when a reminder or bubble is already visible', async () 
   assert.equal(shouldShowPetChat({ enabled: false }), false)
   assert.equal(shouldShowPetChat({ quietMode: true }), false)
 })
+
+test('pet chatter can be forced from tray without interrupting pending reminders', async () => {
+  const { shouldShowPetChat } = await loadPetChatter()
+
+  assert.equal(shouldShowPetChat({
+    enabled: false,
+    quietMode: true,
+    bubbleVisible: true,
+    force: true
+  }), true)
+  assert.equal(shouldShowPetChat({
+    hasPendingReminder: true,
+    force: true
+  }), false)
+})

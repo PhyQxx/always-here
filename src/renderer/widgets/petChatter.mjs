@@ -118,7 +118,10 @@ export function shouldShowPetChat({
   enabled = true,
   quietMode = false,
   hasPendingReminder = false,
-  bubbleVisible = false
+  bubbleVisible = false,
+  force = false
 } = {}) {
+  if (hasPendingReminder) return false
+  if (force) return true
   return enabled && !quietMode && !hasPendingReminder && !bubbleVisible
 }
