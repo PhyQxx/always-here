@@ -18,6 +18,11 @@ export function getSettingsTitle(mode = { type: 'global' }) {
   return `${WIDGET_LABELS[mode.widgetKey] || '组件'}设置`
 }
 
+export function getSettingsModeSummary(mode = { type: 'global' }) {
+  if (mode.type !== 'widget') return '全局设置'
+  return `正在编辑：${WIDGET_LABELS[mode.widgetKey] || '组件'}`
+}
+
 export function isSettingsRowVisible(scopeText, mode = { type: 'global' }) {
   if (mode.type !== 'widget') return true
   const scopes = parseScopes(scopeText)

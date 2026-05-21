@@ -9,11 +9,13 @@ async function loadSettingsScopes() {
 }
 
 test('settings mode titles distinguish global settings from widget settings', async () => {
-  const { getSettingsTitle } = await loadSettingsScopes()
+  const { getSettingsTitle, getSettingsModeSummary } = await loadSettingsScopes()
 
   assert.equal(getSettingsTitle({ type: 'global' }), '设置')
   assert.equal(getSettingsTitle({ type: 'widget', widgetKey: 'pet' }), '宠物设置')
   assert.equal(getSettingsTitle({ type: 'widget', widgetKey: 'wageman' }), '打工倒计时设置')
+  assert.equal(getSettingsModeSummary({ type: 'global' }), '全局设置')
+  assert.equal(getSettingsModeSummary({ type: 'widget', widgetKey: 'note' }), '正在编辑：便签')
 })
 
 test('global settings mode shows every settings row', async () => {

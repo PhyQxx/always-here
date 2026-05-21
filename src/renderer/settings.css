@@ -12,10 +12,38 @@
   z-index: 9999;
 }
 
-.settings-panel h3 {
+.settings-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 16px;
+}
+
+.settings-panel h3 {
+  margin: 0;
   font-weight: 400;
   font-size: 18px;
+}
+
+.settings-panel-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.68;
+}
+
+.settings-panel-header button {
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.settings-panel-header button.hidden {
+  display: none;
 }
 
 .setting-row {
@@ -38,7 +66,9 @@
   margin-bottom: 6px;
 }
 
-.pet-setting-row select {
+.pet-setting-row select,
+.reminders-row select,
+.activity-toolbar select {
   width: 100%;
   padding: 7px 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -48,7 +78,9 @@
   font: inherit;
 }
 
-.pet-setting-row select option {
+.pet-setting-row select option,
+.reminders-row select option,
+.activity-toolbar select option {
   color: #111;
 }
 
@@ -170,6 +202,34 @@
   background: rgba(255, 255, 255, 0.1);
   color: var(--text);
   cursor: pointer;
+}
+
+.activity-toolbar {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.activity-toolbar button {
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.activity-toolbar button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.activity-recent {
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .activity-summary {

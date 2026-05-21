@@ -29,7 +29,8 @@ const DEFAULT_CONFIG = {
   petChat: {
     enabled: true,
     intervalMinutes: 1,
-    quietMode: false
+    quietMode: false,
+    tone: 'companion'
   },
   happiness: 70,
   noteText: '',
@@ -197,6 +198,16 @@ ipcMain.handle('choose-pet-folder', async () => {
   })
   if (result.canceled || !result.filePaths.length) return null
   return result.filePaths[0]
+})
+ipcMain.handle('export-activity-log', async (_, csvText) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: '导出行为记录',
+    defaultPath: `always-here-activity-${new Date().toISOString().slice(0, 10)}.csv`,
+    filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
+  })
+  if (result.canceled || !result.filePath) return null
+  fs.writeFileSync(result.filePath, `\ufeff${csvText}`, 'utf8')
+  return result.filePath
 })
 ipcMain.handle('show-notification', (_, payload) => {
   if (!Notification.isSupported()) return false

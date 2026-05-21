@@ -1,18 +1,24 @@
 import {
   buildActivityAnalysis,
+  exportActivityLogCsv,
+  filterActivityLog,
   formatActivityEntry,
   formatDuration,
+  summarizeRecentDays,
   summarizeActivityLog
 } from './utils/activityStats.mjs'
 import {
+  getSettingsModeSummary,
   getSettingsTitle,
   isSettingsRowVisible
 } from './settingsScopes.mjs'
-import { normalizePetChatSettings } from './widgets/petChatter.mjs'
+import { PET_CHAT_TONES, normalizePetChatSettings } from './widgets/petChatter.mjs'
 
 export function initSettings(getConfig, saveConfig) {
   const panel = document.getElementById('settings-panel')
   const title = document.getElementById('settings-title')
+  const summary = document.getElementById('settings-mode-summary')
+  const backGlobalBtn = document.getElementById('settings-back-global')
   const closeBtn = document.getElementById('settings-close')
   const petSelect = document.getElementById('setting-pet-select')
   const versionSpan = document.getElementById('app-version')
@@ -42,9 +48,19 @@ export function initSettings(getConfig, saveConfig) {
 
   function showPanel(mode = { type: 'global' }) {
     if (title) title.textContent = getSettingsTitle(mode)
+    if (summary) summary.textContent = getSettingsModeSummary(mode)
+    if (backGlobalBtn) backGlobalBtn.classList.toggle('hidden', mode.type !== 'widget')
+    panel.dataset.settingsMode = mode.type
+    panel.dataset.widgetKey = mode.widgetKey || ''
     panel.querySelectorAll('.setting-row').forEach(row => {
       const scope = row.dataset.settingsScope || ''
       row.classList.toggle('hidden', !isSettingsRowVisible(scope, mode))
+    })
+    document.querySelectorAll('.widget').forEach(widget => {
+      widget.classList.toggle(
+        'settings-target',
+        mode.type === 'widget' && widget.dataset.widget === mode.widgetKey
+      )
     })
     panel.classList.remove('hidden')
     window.alwaysHere.setClickThrough(false)
@@ -62,7 +78,14 @@ export function initSettings(getConfig, saveConfig) {
 
   window.alwaysHere.onShowSettings(() => showPanel({ type: 'global' }))
 
-  closeBtn.addEventListener('click', () => panel.classList.add('hidden'))
+  backGlobalBtn?.addEventListener('click', () => showPanel({ type: 'global' }))
+
+  closeBtn.addEventListener('click', () => {
+    panel.classList.add('hidden')
+    document.querySelectorAll('.widget.settings-target').forEach(widget => {
+      widget.classList.remove('settings-target')
+    })
+  })
 
   const widgetKeys = ['clock', 'pet', 'timer', 'note', 'wageman']
   widgetKeys.forEach(key => {
@@ -98,7 +121,7 @@ export function initSettings(getConfig, saveConfig) {
   initPetFolder(getConfig, saveConfig)
   initReminderSettings(getConfig, saveConfig)
   const petChatSettings = initPetChatSettings(getConfig, saveConfig)
-  const activityPanel = initActivityPanel(getConfig)
+  const activityPanel = initActivityPanel(getConfig, saveConfig)
 
   window.alwaysHere.onTrayCommand?.((command) => {
     if (command === 'pet-say-now') {
@@ -219,10 +242,17 @@ function initPetChatSettings(getConfig, saveConfig) {
   const enabledEl = document.getElementById('pet-chat-enabled')
   const intervalEl = document.getElementById('pet-chat-interval')
   const quietEl = document.getElementById('pet-chat-quiet')
-  if (!enabledEl || !intervalEl || !quietEl) return
+  const toneEl = document.getElementById('pet-chat-tone')
+  if (!enabledEl || !intervalEl || !quietEl || !toneEl) return
 
   const config = getConfig()
   config.petChat = normalizePetChatSettings(config.petChat)
+  toneEl.replaceChildren(...PET_CHAT_TONES.map(tone => {
+    const option = document.createElement('option')
+    option.value = tone.id
+    option.textContent = tone.label
+    return option
+  }))
 
   function render() {
     const settings = normalizePetChatSettings(config.petChat)
@@ -230,6 +260,8 @@ function initPetChatSettings(getConfig, saveConfig) {
     intervalEl.value = settings.intervalMinutes
     intervalEl.disabled = !settings.enabled || settings.quietMode
     quietEl.checked = settings.quietMode
+    toneEl.value = settings.tone
+    toneEl.disabled = !settings.enabled
   }
 
   async function persist(nextSettings) {
@@ -249,6 +281,9 @@ function initPetChatSettings(getConfig, saveConfig) {
   quietEl.addEventListener('change', () => {
     persist({ ...config.petChat, quietMode: quietEl.checked })
   })
+  toneEl.addEventListener('change', () => {
+    persist({ ...config.petChat, tone: toneEl.value })
+  })
 
   return {
     toggleQuietMode() {
@@ -258,19 +293,42 @@ function initPetChatSettings(getConfig, saveConfig) {
   }
 }
 
-function initActivityPanel(getConfig) {
+function initActivityPanel(getConfig, saveConfig) {
   const openBtn = document.getElementById('activity-log-open')
   const closeBtn = document.getElementById('activity-log-close')
   const panel = document.getElementById('activity-panel')
-  if (!openBtn || !closeBtn || !panel) return
+  const filterEl = document.getElementById('activity-filter')
+  const rangeEl = document.getElementById('activity-range')
+  const exportBtn = document.getElementById('activity-log-export')
+  const clearBtn = document.getElementById('activity-log-clear')
+  if (!openBtn || !closeBtn || !panel || !filterEl || !rangeEl || !exportBtn || !clearBtn) return
+
+  function getFilters() {
+    return {
+      type: filterEl.value,
+      days: rangeEl.value === 'all' ? 'all' : Number(rangeEl.value)
+    }
+  }
 
   function openActivityPanel() {
-    renderActivityPanel(getConfig().activityLog || [])
+    renderActivityPanel(getConfig().activityLog || [], getFilters())
     panel.classList.remove('hidden')
     window.alwaysHere.setClickThrough(false)
   }
 
   openBtn.addEventListener('click', openActivityPanel)
+  filterEl.addEventListener('change', openActivityPanel)
+  rangeEl.addEventListener('change', openActivityPanel)
+  exportBtn.addEventListener('click', async () => {
+    const entries = filterActivityLog(getConfig().activityLog || [], getFilters())
+    await window.alwaysHere.exportActivityLog?.(exportActivityLogCsv(entries))
+  })
+  clearBtn.addEventListener('click', async () => {
+    if (!confirm('确定清空所有行为记录吗？')) return
+    getConfig().activityLog = []
+    await saveConfig()
+    openActivityPanel()
+  })
 
   closeBtn.addEventListener('click', () => {
     panel.classList.add('hidden')
@@ -281,12 +339,17 @@ function initActivityPanel(getConfig) {
   }
 }
 
-function renderActivityPanel(log) {
+function renderActivityPanel(log, filters = {}) {
+  const filteredLog = filterActivityLog(log, filters)
   const summaryEl = document.getElementById('activity-summary')
+  const recentEl = document.getElementById('activity-recent')
   const chartEl = document.getElementById('activity-chart')
   const analysisEl = document.getElementById('activity-analysis')
   const listEl = document.getElementById('activity-list')
-  const stats = summarizeActivityLog(log)
+  const stats = summarizeActivityLog(filteredLog)
+  const recent = summarizeRecentDays(log, 7)
+
+  recentEl.textContent = `最近 7 天：${recent.entries} 条记录，喝水完成 ${recent.waterDone} 次、漏掉 ${recent.waterMissed} 次，久坐完成 ${recent.sedentaryDone} 次、漏掉 ${recent.sedentaryMissed} 次，加班 ${formatDuration(recent.totalOvertimeMs)}。`
 
   summaryEl.replaceChildren(
     createSummaryItem('总记录', stats.total),
@@ -300,10 +363,10 @@ function renderActivityPanel(log) {
     createReminderBars('久坐', stats.reminders.sedentary)
   )
 
-  analysisEl.textContent = buildActivityAnalysis(log)
+  analysisEl.textContent = buildActivityAnalysis(filteredLog)
 
   listEl.replaceChildren()
-  const entries = [...log].reverse().slice(0, 80)
+  const entries = [...filteredLog].reverse().slice(0, 80)
   if (!entries.length) {
     const empty = document.createElement('div')
     empty.className = 'activity-empty'

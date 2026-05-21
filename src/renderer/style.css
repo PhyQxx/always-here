@@ -29,6 +29,10 @@ body.theme-sakura { --bg: rgba(60, 20, 40, 0.75); --bg-solid: rgba(60, 20, 40, 0
   display: none;
 }
 
+.widget.settings-target {
+  filter: drop-shadow(0 0 14px var(--accent));
+}
+
 .widget:hover {
   transform: scale(1.02);
 }

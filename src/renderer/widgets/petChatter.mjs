@@ -6,8 +6,16 @@ export const MAX_PET_CHAT_INTERVAL_MINUTES = 60
 export const DEFAULT_PET_CHAT_SETTINGS = {
   enabled: true,
   intervalMinutes: 1,
-  quietMode: false
+  quietMode: false,
+  tone: 'companion'
 }
+
+export const PET_CHAT_TONES = [
+  { id: 'companion', label: '陪伴型' },
+  { id: 'focus', label: '效率型' },
+  { id: 'snark', label: '吐槽型' },
+  { id: 'offwork', label: '下班提醒型' }
+]
 
 function boolValue(value, fallback) {
   return typeof value === 'boolean' ? value : fallback
@@ -22,11 +30,18 @@ function intervalValue(value) {
   )
 }
 
+function toneValue(value) {
+  return PET_CHAT_TONES.some(tone => tone.id === value)
+    ? value
+    : DEFAULT_PET_CHAT_SETTINGS.tone
+}
+
 export function normalizePetChatSettings(input = {}) {
   return {
     enabled: boolValue(input.enabled, DEFAULT_PET_CHAT_SETTINGS.enabled),
     intervalMinutes: intervalValue(input.intervalMinutes),
-    quietMode: boolValue(input.quietMode, DEFAULT_PET_CHAT_SETTINGS.quietMode)
+    quietMode: boolValue(input.quietMode, DEFAULT_PET_CHAT_SETTINGS.quietMode),
+    tone: toneValue(input.tone)
   }
 }
 
@@ -56,6 +71,29 @@ const BASE_CHAT_LINES = [
   '别让脑袋一直满格。',
   '我陪你待机一会儿。'
 ]
+
+const TONE_CHAT_LINES = {
+  companion: [
+    '我在这儿陪你。',
+    '慢慢来，也很好。',
+    '先照顾好自己。'
+  ],
+  focus: [
+    '先定一个小目标。',
+    '关掉一个干扰源。',
+    '把这步收干净。'
+  ],
+  snark: [
+    '别和任务深情对望。',
+    '先动手，别开会。',
+    '脑内弹窗先关掉。'
+  ],
+  offwork: [
+    '快到收尾时间啦。',
+    '别把今天拖太长。',
+    '下班也要有仪式感。'
+  ]
+}
 
 const PERIOD_CHAT_LINES = {
   morning: [
@@ -94,10 +132,28 @@ function getChatPeriod(now) {
   return 'night'
 }
 
-export function getPetChatLines(now = new Date()) {
+function getContextLines(activityContext = {}) {
+  const lines = []
+  if ((activityContext.missedWaterCount || 0) > 0) {
+    lines.push('喝水提醒别攒着。')
+  }
+  if ((activityContext.missedSedentaryCount || 0) > 0) {
+    lines.push('站起来换个气口。')
+  }
+  if ((activityContext.overtimeMinutes || 0) >= 30) {
+    lines.push('加班了，记得收尾。')
+  }
+  return lines
+}
+
+export function getPetChatLines(now = new Date(), options = {}) {
+  const settings = normalizePetChatSettings(options)
+  const toneLines = TONE_CHAT_LINES[settings.tone] || TONE_CHAT_LINES.companion
   return [
     ...BASE_CHAT_LINES,
-    ...PERIOD_CHAT_LINES[getChatPeriod(now)]
+    ...toneLines,
+    ...PERIOD_CHAT_LINES[getChatPeriod(now)],
+    ...getContextLines(options.activityContext)
   ]
 }
 

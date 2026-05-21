@@ -19,10 +19,12 @@ import {
   PET_CHAT_BUBBLE_DURATION_MS,
   getPetChatIntervalMs,
   normalizePetChatSettings,
+  getPetChatLines,
   pickPetChatLine,
   shouldShowPetChat
 } from './petChatter.mjs'
 import { appendActivityLog } from '../utils/activityLog.mjs'
+import { summarizeRecentDays } from '../utils/activityStats.mjs'
 
 const CANVAS_WIDTH = 130
 const CANVAS_HEIGHT = 150
@@ -195,7 +197,8 @@ function startReminderLoop() {
 }
 
 function showPetChat(options = {}) {
-  const chatSettings = normalizePetChatSettings(getConfigFn().petChat)
+  const config = getConfigFn()
+  const chatSettings = normalizePetChatSettings(config.petChat)
   const bubble = document.getElementById('pet-bubble')
   const bubbleVisible = bubble ? !bubble.classList.contains('hidden') : false
   if (!shouldShowPetChat({
@@ -205,7 +208,16 @@ function showPetChat(options = {}) {
     bubbleVisible,
     force: Boolean(options.force)
   })) return
-  lastPetChatLine = pickPetChatLine({ previousLine: lastPetChatLine })
+  const recent = summarizeRecentDays(config.activityLog || [], 7)
+  const lines = getPetChatLines(new Date(), {
+    tone: chatSettings.tone,
+    activityContext: {
+      missedWaterCount: recent.waterMissed,
+      missedSedentaryCount: recent.sedentaryMissed,
+      overtimeMinutes: Math.floor(recent.totalOvertimeMs / 60000)
+    }
+  })
+  lastPetChatLine = pickPetChatLine({ previousLine: lastPetChatLine, lines })
   showBubble(lastPetChatLine, { duration: PET_CHAT_BUBBLE_DURATION_MS })
   if (currentAnimation === 'idle') playAction('waving')
 }

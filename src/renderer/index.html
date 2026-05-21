@@ -79,7 +79,13 @@
   </div>
 
   <div id="settings-panel" class="settings-panel hidden">
-    <h3 id="settings-title">设置</h3>
+    <div class="settings-panel-header">
+      <div>
+        <h3 id="settings-title">设置</h3>
+        <p id="settings-mode-summary">全局设置</p>
+      </div>
+      <button type="button" id="settings-back-global" class="hidden">返回全局</button>
+    </div>
     <div class="setting-row" data-settings-scope="clock"><label><input type="checkbox" id="setting-clock" checked> 时钟</label></div>
     <div class="setting-row" data-settings-scope="pet"><label><input type="checkbox" id="setting-pet" checked> 宠物</label></div>
     <div class="setting-row" data-settings-scope="timer"><label><input type="checkbox" id="setting-timer" checked> 秒表</label></div>
@@ -125,6 +131,10 @@
       <label><input type="checkbox" id="pet-chat-quiet"> 安静模式</label>
       <span>暂停宠物闲聊</span>
     </div>
+    <div class="setting-row reminders-row" data-settings-scope="pet">
+      <label for="pet-chat-tone">说话风格</label>
+      <select id="pet-chat-tone"></select>
+    </div>
     <div class="setting-row" data-settings-scope="pet"><button type="button" id="activity-log-open">行为记录</button></div>
     <div class="setting-row" data-settings-scope="global">
       <label>主题</label>
@@ -147,6 +157,21 @@
       <h3>行为记录</h3>
       <button type="button" id="activity-log-close">关闭</button>
     </div>
+    <div class="activity-toolbar">
+      <select id="activity-filter">
+        <option value="all">全部记录</option>
+        <option value="water">喝水</option>
+        <option value="sedentary">久坐</option>
+        <option value="work">下班</option>
+      </select>
+      <select id="activity-range">
+        <option value="7">最近 7 天</option>
+        <option value="all">全部时间</option>
+      </select>
+      <button type="button" id="activity-log-export">导出</button>
+      <button type="button" id="activity-log-clear">清空</button>
+    </div>
+    <div class="activity-recent" id="activity-recent"></div>
     <div class="activity-summary" id="activity-summary"></div>
     <div class="activity-chart" id="activity-chart"></div>
     <div class="activity-analysis" id="activity-analysis"></div>
