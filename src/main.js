@@ -3,6 +3,7 @@ const path = require('path')
 const fs = require('fs')
 const { APP_ICON_PNG_PATH, TRAY_ICON_PNG_PATH, getNotificationOptions } = require('./appIcon')
 const { CODEX_PETS_DIR, getPetSpritesheetDataUrl, importCodexPetPackage, listPets } = require('./petStore')
+const { initUpdater, checkHotUpdate } = require('./updater')
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
 
@@ -251,7 +252,6 @@ ipcMain.handle('get-app-version', () => app.getVersion())
 ipcMain.handle('check-hot-update', async () => {
   if (!app.isPackaged) return { error: '开发环境不支持热更新' }
   try {
-    const { checkHotUpdate } = require('./updater')
     await checkHotUpdate(mainWindow)
     return { success: true }
   } catch (err) {
@@ -265,6 +265,11 @@ app.whenReady().then(() => {
   }
   createWindow()
   createTray()
+  
+  // 初始化更新检查
+  if (app.isPackaged) {
+    initUpdater(mainWindow)
+  }
 })
 
 app.on('window-all-closed', () => {

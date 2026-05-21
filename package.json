@@ -1,6 +1,6 @@
 {
   "name": "always-here",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "一款包含桌面宠物、时钟、便签、秒表和打工倒计时的 Electron 桌面陪伴工具",
   "main": "src/main.js",
   "scripts": {
@@ -34,6 +34,12 @@
   "build": {
     "appId": "com.always-here.app",
     "productName": "Always Here",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://ftp.pnkx.top:8/ftp/always-here/"
+      }
+    ],
     "win": {
       "icon": "build/icon.ico",
       "target": "nsis"
@@ -44,5 +50,9 @@
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico"
     }
+  },
+  "dependencies": {
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.3"
   }
 }
