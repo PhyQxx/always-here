@@ -5,9 +5,17 @@ const { APP_ICON_PNG_PATH, TRAY_ICON_PNG_PATH, getNotificationOptions } = requir
 const { CODEX_PETS_DIR, getPetSpritesheetDataUrl, importCodexPetPackage, listPets } = require('./petStore')
 const { initUpdater, checkHotUpdate } = require('./updater')
 
+const PET_CHAT_TONES = [
+  { id: 'companion', label: '陪伴型' },
+  { id: 'focus', label: '效率型' },
+  { id: 'snark', label: '吐槽型' },
+  { id: 'offwork', label: '下班提醒型' }
+]
+
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
 
 const DEFAULT_CONFIG = {
+  configVersion: 1,
   widgets: {
     clock: { enabled: true, x: 50, y: 50 },
     pet: { enabled: true, x: 300, y: 400 },
@@ -145,7 +153,17 @@ function refreshTrayMenu() {
     },
     {
       label: '宠物说一句',
-      click: () => sendToRenderer('tray-command', 'pet-say-now', { reveal: true })
+      submenu: [
+        {
+          label: '直接说',
+          click: () => sendToRenderer('tray-command', { type: 'pet-say-now' }, { reveal: true })
+        },
+        { type: 'separator' },
+        ...PET_CHAT_TONES.map(tone => ({
+          label: `以 ${tone.label} 语气说`,
+          click: () => sendToRenderer('tray-command', { type: 'pet-say-now', tone: tone.id }, { reveal: true })
+        }))
+      ]
     },
     {
       label: '安静模式',
@@ -247,6 +265,25 @@ ipcMain.handle('fetch-holidays', async (_, year) => {
   })
 })
 
+ipcMain.handle('open-pet-folder', (_, petId) => {
+  const config = loadConfig()
+  const folder = petId ? path.join(config.petFolderPath || CODEX_PETS_DIR, petId) : (config.petFolderPath || CODEX_PETS_DIR)
+  if (fs.existsSync(folder)) {
+    shell.openPath(folder)
+    return true
+  }
+  return false
+})
+ipcMain.handle('delete-pet', async (_, petId) => {
+  const config = loadConfig()
+  const root = config.petFolderPath || CODEX_PETS_DIR
+  const petDir = path.join(root, petId)
+  if (fs.existsSync(petDir) && isInside(root, petDir)) {
+    fs.rmSync(petDir, { recursive: true, force: true })
+    return true
+  }
+  return false
+})
 ipcMain.handle('get-app-version', () => app.getVersion())
 
 ipcMain.handle('check-hot-update', async () => {

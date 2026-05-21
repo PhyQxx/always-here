@@ -208,13 +208,16 @@ function showPetChat(options = {}) {
     bubbleVisible,
     force: Boolean(options.force)
   })) return
+  
+  const tone = options.tone || chatSettings.tone
   const recent = summarizeRecentDays(config.activityLog || [], 7)
   const lines = getPetChatLines(new Date(), {
-    tone: chatSettings.tone,
+    tone: tone,
     activityContext: {
       missedWaterCount: recent.waterMissed,
       missedSedentaryCount: recent.sedentaryMissed,
-      overtimeMinutes: Math.floor(recent.totalOvertimeMs / 60000)
+      overtimeMinutes: Math.floor(recent.totalOvertimeMs / 60000),
+      wageman: config.wageman // Pass wageman config for specific lines
     }
   })
   lastPetChatLine = pickPetChatLine({ previousLine: lastPetChatLine, lines })
@@ -299,8 +302,16 @@ export async function initPet(getConfig, saveConfig) {
     startPetChatLoop()
   })
 
-  window.addEventListener('pet-chat-now', () => {
-    showPetChat({ force: true })
+  window.addEventListener('tray-command', (event) => {
+    const payload = event.detail
+    const command = typeof payload === 'string' ? payload : payload.type
+    if (command === 'pet-say-now') {
+      showPetChat({ force: true, tone: payload.tone })
+    }
+    if (command === 'toggle-pet-quiet-mode') {
+      // handled by tray logic usually, but ensure we update if needed
+      startPetChatLoop() 
+    }
   })
 
   window.addEventListener('pet-reminder', (event) => {
@@ -320,6 +331,11 @@ export async function initPet(getConfig, saveConfig) {
   })
 
   widget.addEventListener('mouseenter', () => {
+    if (currentAnimation === 'idle') playAction('waving')
+  })
+
+  widget.addEventListener('click', () => {
+    showPetChat({ force: true })
     if (currentAnimation === 'idle') playAction('waving')
   })
 

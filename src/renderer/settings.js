@@ -13,6 +13,7 @@ import {
   isSettingsRowVisible
 } from './settingsScopes.mjs'
 import { PET_CHAT_TONES, normalizePetChatSettings } from './widgets/petChatter.mjs'
+import { showToast, showConfirm } from './utils/ui.mjs'
 
 export function initSettings(getConfig, saveConfig) {
   const panel = document.getElementById('settings-panel')
@@ -20,13 +21,14 @@ export function initSettings(getConfig, saveConfig) {
   const summary = document.getElementById('settings-mode-summary')
   const backGlobalBtn = document.getElementById('settings-back-global')
   const closeBtn = document.getElementById('settings-close')
+  const headerCloseBtn = document.getElementById('settings-header-close')
   const petSelect = document.getElementById('setting-pet-select')
   const versionSpan = document.getElementById('app-version')
   const updateBtn = document.getElementById('check-update-btn')
 
   // Load version
   window.alwaysHere.getAppVersion().then(version => {
-    versionSpan.textContent = `版本: v${version}`
+    versionSpan.textContent = `v${version}`
   })
 
   updateBtn.addEventListener('click', async () => {
@@ -36,26 +38,45 @@ export function initSettings(getConfig, saveConfig) {
     try {
       const res = await window.alwaysHere.checkHotUpdate()
       if (res && res.error) {
-        alert(res.error)
+        showToast(res.error, 'error')
       }
     } catch (e) {
-      alert('更新检查失败: ' + e.message)
+      showToast('更新检查失败: ' + e.message, 'error')
     } finally {
       updateBtn.textContent = originalText
       updateBtn.disabled = false
     }
   })
 
+  const tabsContainer = document.getElementById('settings-tabs')
+  const tabs = tabsContainer.querySelectorAll('.settings-tab')
+  const tabContents = panel.querySelectorAll('.settings-tab-content')
+
+  function switchTab(tabId) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabId))
+    tabContents.forEach(c => c.classList.toggle('active', c.dataset.tabContent === tabId))
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab))
+  })
+
   function showPanel(mode = { type: 'global' }) {
     if (title) title.textContent = getSettingsTitle(mode)
     if (summary) summary.textContent = getSettingsModeSummary(mode)
-    if (backGlobalBtn) backGlobalBtn.classList.toggle('hidden', mode.type !== 'widget')
+    // Always show tabs, "Back to Global" is now redundant but kept for layout consistency if needed
+    if (backGlobalBtn) backGlobalBtn.classList.toggle('hidden', true)
+    
     panel.dataset.settingsMode = mode.type
     panel.dataset.widgetKey = mode.widgetKey || ''
-    panel.querySelectorAll('.setting-row').forEach(row => {
-      const scope = row.dataset.settingsScope || ''
-      row.classList.toggle('hidden', !isSettingsRowVisible(scope, mode))
-    })
+    
+    // Switch to appropriate tab
+    if (mode.type === 'widget' && mode.widgetKey) {
+      switchTab(mode.widgetKey)
+    } else {
+      switchTab('components')
+    }
+    
     document.querySelectorAll('.widget').forEach(widget => {
       widget.classList.toggle(
         'settings-target',
@@ -64,7 +85,395 @@ export function initSettings(getConfig, saveConfig) {
     })
     panel.classList.remove('hidden')
     window.alwaysHere.setClickThrough(false)
+    
+    // Always refresh pet manager when pet tab might be visited
+    renderPetManager()
   }
+
+  async function renderPetManager() {
+    const listEl = document.getElementById('pet-manager-list')
+    if (!listEl) return
+    
+    // Show loading state
+    listEl.innerHTML = `
+      <div class="pet-manager-loading">
+        <div class="spinner"></div>
+        <span>正在加载宠物库...</span>
+      </div>
+    `
+    
+    const pets = await window.alwaysHere.listPets()
+    const config = getConfig()
+
+    listEl.replaceChildren()
+    if (pets.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'pet-manager-loading'
+      empty.textContent = '未发现已安装的宠物'
+      listEl.appendChild(empty)
+      return
+    }
+
+    for (const pet of pets) {
+      const card = document.createElement('div')
+      card.className = `pet-card ${pet.id === config.petId ? 'active' : ''}`
+      
+      const preview = document.createElement('div')
+      preview.className = 'pet-card-preview'
+      const canvas = document.createElement('canvas')
+      canvas.width = 130
+      canvas.height = 150
+      preview.appendChild(canvas)
+      
+      // Load and draw preview
+      window.alwaysHere.getPetSpritesheet(pet.id).then(result => {
+        const img = new Image()
+        img.onload = () => {
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, 130, 150, 0, 0, 130, 150)
+        }
+        img.src = result.dataUrl
+      })
+
+      const name = document.createElement('div')
+      name.className = 'pet-card-name'
+      name.textContent = pet.displayName || pet.id
+
+      const actions = document.createElement('div')
+      actions.className = 'pet-card-actions'
+      
+      const useBtn = document.createElement('button')
+      useBtn.className = 'pet-card-btn use-btn'
+      useBtn.textContent = '使用'
+      useBtn.onclick = async () => {
+        config.petId = pet.id
+        await saveConfig()
+        if (petSelect) petSelect.value = pet.id
+        window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+        renderPetManager()
+      }
+
+      const folderBtn = document.createElement('button')
+      folderBtn.className = 'pet-card-btn'
+      folderBtn.textContent = '文件夹'
+      folderBtn.onclick = () => window.alwaysHere.openPetFolder(pet.id)
+
+      const deleteBtn = document.createElement('button')
+      deleteBtn.className = 'pet-card-btn delete'
+      deleteBtn.textContent = '删除'
+      deleteBtn.onclick = async () => {
+        if (pet.id === 'hina') {
+          showToast('内置宠物不能删除', 'error')
+          return
+        }
+        if (!await showConfirm(`确定要删除宠物 ${pet.displayName || pet.id} 吗？`)) return
+        const success = await window.alwaysHere.deletePet(pet.id)
+        if (success) {
+          showToast('已删除', 'success')
+          if (config.petId === pet.id) {
+            config.petId = 'hina'
+            await saveConfig()
+            window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+          }
+          await refreshPetSelect(petSelect)
+          renderPetManager()
+        }
+      }
+
+      actions.append(useBtn, folderBtn, deleteBtn)
+      card.append(preview, name, actions)
+      listEl.appendChild(card)
+    }
+  }
+
+  async function refreshPetSelect(select) {
+    const pets = await window.alwaysHere.listPets()
+    if (!select) return
+    select.replaceChildren()
+
+    if (!pets.length) {
+      const option = document.createElement('option')
+      option.value = ''
+      option.textContent = '未找到本地宠物'
+      select.appendChild(option)
+      select.disabled = true
+      return
+    }
+
+    select.disabled = false
+    pets.forEach(pet => {
+      const option = document.createElement('option')
+      option.value = pet.id
+      option.textContent = pet.displayName || pet.id
+      option.title = pet.description || ''
+      select.appendChild(option)
+    })
+
+    const config = getConfig()
+    if (!pets.some(pet => pet.id === config.petId)) {
+      config.petId = pets[0].id
+      await saveConfig()
+    }
+    select.value = config.petId
+  }
+
+  async function initPetSelect(select) {
+    if (!select) return
+    try {
+      await refreshPetSelect(select)
+      select.addEventListener('change', async () => {
+        getConfig().petId = select.value
+        await saveConfig()
+        window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+        renderPetManager()
+      })
+    } catch (error) {
+      console.warn('Failed to list pets:', error)
+      select.disabled = true
+    }
+  }
+
+  function initPetFolder() {
+    const valueEl = document.getElementById('setting-pet-folder')
+    const chooseBtn = document.getElementById('setting-pet-folder-choose')
+    if (!valueEl || !chooseBtn) return
+
+    function render() {
+      valueEl.textContent = getConfig().petFolderPath || ''
+      valueEl.title = getConfig().petFolderPath || ''
+    }
+
+    render()
+    chooseBtn.addEventListener('click', async () => {
+      const folder = await window.alwaysHere.choosePetFolder()
+      if (!folder) return
+      getConfig().petFolderPath = folder
+      await saveConfig()
+      render()
+      await refreshPetSelect(petSelect)
+      renderPetManager()
+      window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+    })
+  }
+
+  function initPetPackageImport() {
+    const importBtn = document.getElementById('pet-package-import')
+    const statusEl = document.getElementById('pet-package-import-status')
+    const downloadLink = document.getElementById('pet-download-link')
+    if (!importBtn || !statusEl) return
+
+    downloadLink?.addEventListener('click', (event) => {
+      event.preventDefault()
+      window.alwaysHere.openExternal?.('https://codex-pets.net/')
+    })
+
+    importBtn.addEventListener('click', async () => {
+      const originalText = importBtn.textContent
+      importBtn.disabled = true
+      importBtn.textContent = '导入中...'
+      statusEl.textContent = ''
+      try {
+        const imported = await window.alwaysHere.importPetPackage()
+        if (!imported) {
+          statusEl.textContent = '已取消导入。'
+          return
+        }
+        getConfig().petId = imported.id
+        await saveConfig()
+        await refreshPetSelect(petSelect)
+        renderPetManager()
+        window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+        statusEl.textContent = `已导入：${imported.displayName || imported.id}`
+      } catch (error) {
+        statusEl.textContent = error.message || '导入失败，请确认宠物包是否完整。'
+      } finally {
+        importBtn.disabled = false
+        importBtn.textContent = originalText
+      }
+    })
+  }
+
+  function initReminderSettings() {
+    const bindings = [
+      ['hourly', 'enabled', 'reminder-hourly-enabled', 'checked'],
+      ['hourly', 'systemNotification', 'reminder-hourly-notify', 'checked'],
+      ['water', 'enabled', 'reminder-water-enabled', 'checked'],
+      ['water', 'systemNotification', 'reminder-water-notify', 'checked'],
+      ['water', 'intervalMinutes', 'reminder-water-interval', 'value'],
+      ['sedentary', 'enabled', 'reminder-sedentary-enabled', 'checked'],
+      ['sedentary', 'systemNotification', 'reminder-sedentary-notify', 'checked'],
+      ['sedentary', 'intervalMinutes', 'reminder-sedentary-interval', 'value'],
+      ['work', 'enabled', 'reminder-work-enabled', 'checked'],
+      ['work', 'systemNotification', 'reminder-work-notify', 'checked']
+    ]
+
+    const reminders = ensureReminderConfig(getConfig())
+    bindings.forEach(([type, prop, id, field]) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el[field] = reminders[type][prop]
+      el.addEventListener('change', async () => {
+        const nextValue = field === 'checked'
+          ? el.checked
+          : Math.max(1, Number(el.value) || 1)
+        reminders[type][prop] = nextValue
+        if (field === 'value') el.value = nextValue
+        await saveConfig()
+        window.dispatchEvent(new CustomEvent('reminder-settings-changed', {
+          detail: { type, prop }
+        }))
+      })
+    })
+  }
+
+  function initPetChatSettings() {
+    const enabledEl = document.getElementById('pet-chat-enabled')
+    const intervalEl = document.getElementById('pet-chat-interval')
+    const intervalVal = document.getElementById('pet-chat-interval-val')
+    const quietEl = document.getElementById('pet-chat-quiet')
+    const toneEl = document.getElementById('pet-chat-tone')
+    if (!enabledEl || !intervalEl || !quietEl || !toneEl) return
+
+    const config = getConfig()
+    config.petChat = normalizePetChatSettings(config.petChat)
+    toneEl.replaceChildren(...PET_CHAT_TONES.map(tone => {
+      const option = document.createElement('option')
+      option.value = tone.id
+      option.textContent = tone.label
+      return option
+    }))
+
+    function render() {
+      const settings = normalizePetChatSettings(config.petChat)
+      enabledEl.checked = settings.enabled
+      intervalEl.value = settings.intervalMinutes
+      if (intervalVal) intervalVal.textContent = settings.intervalMinutes
+      intervalEl.disabled = !settings.enabled || settings.quietMode
+      quietEl.checked = settings.quietMode
+      toneEl.value = settings.tone
+      toneEl.disabled = !settings.enabled
+    }
+
+    async function persist(nextSettings) {
+      config.petChat = normalizePetChatSettings(nextSettings)
+      render()
+      await saveConfig()
+      window.dispatchEvent(new CustomEvent('pet-chat-settings-changed'))
+    }
+
+    render()
+    enabledEl.addEventListener('change', () => {
+      persist({ ...config.petChat, enabled: enabledEl.checked })
+    })
+    intervalEl.addEventListener('input', () => {
+      if (intervalVal) intervalVal.textContent = intervalEl.value
+    })
+    intervalEl.addEventListener('change', () => {
+      persist({ ...config.petChat, intervalMinutes: intervalEl.value })
+    })
+    quietEl.addEventListener('change', () => {
+      persist({ ...config.petChat, quietMode: quietEl.checked })
+    })
+    toneEl.addEventListener('change', () => {
+      persist({ ...config.petChat, tone: toneEl.value })
+    })
+
+    return {
+      toggleQuietMode() {
+        const settings = normalizePetChatSettings(config.petChat)
+        return persist({ ...settings, quietMode: !settings.quietMode })
+      }
+    }
+  }
+
+  function initActivityPanel() {
+    const openBtn = document.getElementById('activity-log-open')
+    const closeBtn = document.getElementById('activity-log-close')
+    const actPanel = document.getElementById('activity-panel')
+    const filterEl = document.getElementById('activity-filter')
+    const rangeEl = document.getElementById('activity-range')
+    const exportBtn = document.getElementById('activity-log-export')
+    const clearBtn = document.getElementById('activity-log-clear')
+    if (!openBtn || !closeBtn || !actPanel || !filterEl || !rangeEl || !exportBtn || !clearBtn) return
+
+    function getFilters() {
+      return {
+        type: filterEl.value,
+        days: rangeEl.value === 'all' ? 'all' : Number(rangeEl.value)
+      }
+    }
+
+    function openActivityPanel() {
+      renderActivityPanel(getConfig().activityLog || [], getFilters())
+      actPanel.classList.remove('hidden')
+      window.alwaysHere.setClickThrough(false)
+    }
+
+    openBtn.addEventListener('click', openActivityPanel)
+    filterEl.addEventListener('change', openActivityPanel)
+    rangeEl.addEventListener('change', openActivityPanel)
+    exportBtn.addEventListener('click', async () => {
+      const entries = filterActivityLog(getConfig().activityLog || [], getFilters())
+      await window.alwaysHere.exportActivityLog?.(exportActivityLogCsv(entries))
+    })
+    clearBtn.addEventListener('click', async () => {
+      if (!await showConfirm('确定清空所有行为记录吗？')) return
+      getConfig().activityLog = []
+      await saveConfig()
+      openActivityPanel()
+      showToast('记录已清空', 'success')
+    })
+
+    closeBtn.addEventListener('click', () => {
+      actPanel.classList.add('hidden')
+    })
+
+    return {
+      open: openActivityPanel
+    }
+  }
+
+  function initWagemanSettings() {
+    const clockInInput = document.getElementById('setting-wageman-clockin')
+    const clockOutInput = document.getElementById('setting-wageman-clockout')
+    const salaryInput = document.getElementById('setting-wageman-salary')
+    const workDaysInput = document.getElementById('setting-wageman-workdays')
+    const workDaysLabel = document.getElementById('setting-wageman-workdays-label')
+    if (!clockInInput || !clockOutInput || !salaryInput || !workDaysInput) return
+
+    const config = getConfig()
+    const wc = config.wageman || {}
+    
+    clockInInput.value = wc.clockIn || '09:00'
+    clockOutInput.value = wc.clockOut || '17:00'
+    salaryInput.value = wc.monthlySalary || '8000'
+    workDaysInput.value = wc.workDays || ''
+
+    const saveInputs = () => {
+      wc.clockIn = clockInInput.value
+      wc.clockOut = clockOutInput.value
+      wc.monthlySalary = salaryInput.value
+      wc.workDays = workDaysInput.value
+      saveConfig()
+      window.dispatchEvent(new CustomEvent('wageman-settings-changed'))
+    }
+
+    clockInInput.addEventListener('change', saveInputs)
+    clockOutInput.addEventListener('change', saveInputs)
+    salaryInput.addEventListener('change', saveInputs)
+    workDaysInput.addEventListener('change', () => {
+      wc.workDaysAuto = false
+      if (workDaysLabel) workDaysLabel.textContent = '工作日 (手动)'
+      saveInputs()
+    })
+
+    window.addEventListener('wageman-workdays-autofilled', (e) => {
+      workDaysInput.value = e.detail.workDays
+      if (workDaysLabel) workDaysLabel.textContent = e.detail.label
+    })
+  }
+
+  // --- Start of initSettings execution ---
 
   document.querySelectorAll('.widget').forEach(w => {
     w.addEventListener('contextmenu', (e) => {
@@ -80,12 +489,15 @@ export function initSettings(getConfig, saveConfig) {
 
   backGlobalBtn?.addEventListener('click', () => showPanel({ type: 'global' }))
 
-  closeBtn.addEventListener('click', () => {
+  const closeSettings = () => {
     panel.classList.add('hidden')
     document.querySelectorAll('.widget.settings-target').forEach(widget => {
       widget.classList.remove('settings-target')
     })
-  })
+  }
+
+  closeBtn.addEventListener('click', closeSettings)
+  headerCloseBtn?.addEventListener('click', closeSettings)
 
   const widgetKeys = ['clock', 'pet', 'timer', 'note', 'wageman']
   widgetKeys.forEach(key => {
@@ -117,263 +529,26 @@ export function initSettings(getConfig, saveConfig) {
     })
   })
 
-  initPetSelect(petSelect, getConfig, saveConfig)
-  initPetFolder(getConfig, saveConfig)
-  initPetPackageImport(petSelect, getConfig, saveConfig)
-  initReminderSettings(getConfig, saveConfig)
-  const petChatSettings = initPetChatSettings(getConfig, saveConfig)
-  const activityPanel = initActivityPanel(getConfig, saveConfig)
+  initPetSelect(petSelect)
+  initPetFolder()
+  initPetPackageImport()
+  initReminderSettings()
+  const petChatSettings = initPetChatSettings()
+  const activityPanel = initActivityPanel()
+  initWagemanSettings()
 
   window.alwaysHere.onTrayCommand?.((command) => {
-    if (command === 'pet-say-now') {
-      window.dispatchEvent(new CustomEvent('pet-chat-now'))
+    const type = typeof command === 'string' ? command : command.type
+    if (type === 'pet-say-now') {
+      window.dispatchEvent(new CustomEvent('tray-command', { detail: command }))
     }
-    if (command === 'toggle-pet-quiet-mode') {
+    if (type === 'toggle-pet-quiet-mode') {
       petChatSettings?.toggleQuietMode()
     }
-    if (command === 'show-activity') {
+    if (type === 'show-activity') {
       activityPanel?.open()
     }
   })
-}
-
-async function refreshPetSelect(select, getConfig, saveConfig) {
-  const pets = await window.alwaysHere.listPets()
-  select.replaceChildren()
-
-  if (!pets.length) {
-    const option = document.createElement('option')
-    option.value = ''
-    option.textContent = '未找到本地宠物'
-    select.appendChild(option)
-    select.disabled = true
-    return
-  }
-
-  select.disabled = false
-  pets.forEach(pet => {
-    const option = document.createElement('option')
-    option.value = pet.id
-    option.textContent = pet.displayName || pet.id
-    option.title = pet.description || ''
-    select.appendChild(option)
-  })
-
-  const config = getConfig()
-  if (!pets.some(pet => pet.id === config.petId)) {
-    config.petId = pets[0].id
-    await saveConfig()
-  }
-  select.value = config.petId
-}
-
-async function initPetSelect(select, getConfig, saveConfig) {
-  if (!select) return
-
-  try {
-    await refreshPetSelect(select, getConfig, saveConfig)
-    select.addEventListener('change', async () => {
-      getConfig().petId = select.value
-      await saveConfig()
-      window.dispatchEvent(new CustomEvent('pet-selection-changed'))
-    })
-  } catch (error) {
-    console.warn('Failed to list pets:', error)
-    select.disabled = true
-  }
-}
-
-function initPetFolder(getConfig, saveConfig) {
-  const valueEl = document.getElementById('setting-pet-folder')
-  const chooseBtn = document.getElementById('setting-pet-folder-choose')
-  const petSelect = document.getElementById('setting-pet-select')
-  if (!valueEl || !chooseBtn) return
-
-  function render() {
-    valueEl.textContent = getConfig().petFolderPath || ''
-    valueEl.title = getConfig().petFolderPath || ''
-  }
-
-  render()
-  chooseBtn.addEventListener('click', async () => {
-    const folder = await window.alwaysHere.choosePetFolder()
-    if (!folder) return
-    getConfig().petFolderPath = folder
-    await saveConfig()
-    render()
-    if (petSelect) await refreshPetSelect(petSelect, getConfig, saveConfig)
-    window.dispatchEvent(new CustomEvent('pet-selection-changed'))
-  })
-}
-
-function initPetPackageImport(petSelect, getConfig, saveConfig) {
-  const importBtn = document.getElementById('pet-package-import')
-  const statusEl = document.getElementById('pet-package-import-status')
-  const downloadLink = document.getElementById('pet-download-link')
-  if (!importBtn || !statusEl) return
-
-  downloadLink?.addEventListener('click', (event) => {
-    event.preventDefault()
-    window.alwaysHere.openExternal?.('https://codex-pets.net/')
-  })
-
-  importBtn.addEventListener('click', async () => {
-    const originalText = importBtn.textContent
-    importBtn.disabled = true
-    importBtn.textContent = '导入中...'
-    statusEl.textContent = ''
-    try {
-      const imported = await window.alwaysHere.importPetPackage()
-      if (!imported) {
-        statusEl.textContent = '已取消导入。'
-        return
-      }
-      getConfig().petId = imported.id
-      await saveConfig()
-      if (petSelect) await refreshPetSelect(petSelect, getConfig, saveConfig)
-      window.dispatchEvent(new CustomEvent('pet-selection-changed'))
-      statusEl.textContent = `已导入：${imported.displayName || imported.id}`
-    } catch (error) {
-      statusEl.textContent = error.message || '导入失败，请确认宠物包是否完整。'
-    } finally {
-      importBtn.disabled = false
-      importBtn.textContent = originalText
-    }
-  })
-}
-
-function initReminderSettings(getConfig, saveConfig) {
-  const bindings = [
-    ['hourly', 'enabled', 'reminder-hourly-enabled', 'checked'],
-    ['hourly', 'systemNotification', 'reminder-hourly-notify', 'checked'],
-    ['water', 'enabled', 'reminder-water-enabled', 'checked'],
-    ['water', 'systemNotification', 'reminder-water-notify', 'checked'],
-    ['water', 'intervalMinutes', 'reminder-water-interval', 'value'],
-    ['sedentary', 'enabled', 'reminder-sedentary-enabled', 'checked'],
-    ['sedentary', 'systemNotification', 'reminder-sedentary-notify', 'checked'],
-    ['sedentary', 'intervalMinutes', 'reminder-sedentary-interval', 'value'],
-    ['work', 'enabled', 'reminder-work-enabled', 'checked'],
-    ['work', 'systemNotification', 'reminder-work-notify', 'checked']
-  ]
-
-  const reminders = ensureReminderConfig(getConfig())
-  bindings.forEach(([type, prop, id, field]) => {
-    const el = document.getElementById(id)
-    if (!el) return
-    el[field] = reminders[type][prop]
-    el.addEventListener('change', async () => {
-      const nextValue = field === 'checked'
-        ? el.checked
-        : Math.max(1, Number(el.value) || 1)
-      reminders[type][prop] = nextValue
-      if (field === 'value') el.value = nextValue
-      await saveConfig()
-      window.dispatchEvent(new CustomEvent('reminder-settings-changed', {
-        detail: { type, prop }
-      }))
-    })
-  })
-}
-
-function initPetChatSettings(getConfig, saveConfig) {
-  const enabledEl = document.getElementById('pet-chat-enabled')
-  const intervalEl = document.getElementById('pet-chat-interval')
-  const quietEl = document.getElementById('pet-chat-quiet')
-  const toneEl = document.getElementById('pet-chat-tone')
-  if (!enabledEl || !intervalEl || !quietEl || !toneEl) return
-
-  const config = getConfig()
-  config.petChat = normalizePetChatSettings(config.petChat)
-  toneEl.replaceChildren(...PET_CHAT_TONES.map(tone => {
-    const option = document.createElement('option')
-    option.value = tone.id
-    option.textContent = tone.label
-    return option
-  }))
-
-  function render() {
-    const settings = normalizePetChatSettings(config.petChat)
-    enabledEl.checked = settings.enabled
-    intervalEl.value = settings.intervalMinutes
-    intervalEl.disabled = !settings.enabled || settings.quietMode
-    quietEl.checked = settings.quietMode
-    toneEl.value = settings.tone
-    toneEl.disabled = !settings.enabled
-  }
-
-  async function persist(nextSettings) {
-    config.petChat = normalizePetChatSettings(nextSettings)
-    render()
-    await saveConfig()
-    window.dispatchEvent(new CustomEvent('pet-chat-settings-changed'))
-  }
-
-  render()
-  enabledEl.addEventListener('change', () => {
-    persist({ ...config.petChat, enabled: enabledEl.checked })
-  })
-  intervalEl.addEventListener('change', () => {
-    persist({ ...config.petChat, intervalMinutes: intervalEl.value })
-  })
-  quietEl.addEventListener('change', () => {
-    persist({ ...config.petChat, quietMode: quietEl.checked })
-  })
-  toneEl.addEventListener('change', () => {
-    persist({ ...config.petChat, tone: toneEl.value })
-  })
-
-  return {
-    toggleQuietMode() {
-      const settings = normalizePetChatSettings(config.petChat)
-      return persist({ ...settings, quietMode: !settings.quietMode })
-    }
-  }
-}
-
-function initActivityPanel(getConfig, saveConfig) {
-  const openBtn = document.getElementById('activity-log-open')
-  const closeBtn = document.getElementById('activity-log-close')
-  const panel = document.getElementById('activity-panel')
-  const filterEl = document.getElementById('activity-filter')
-  const rangeEl = document.getElementById('activity-range')
-  const exportBtn = document.getElementById('activity-log-export')
-  const clearBtn = document.getElementById('activity-log-clear')
-  if (!openBtn || !closeBtn || !panel || !filterEl || !rangeEl || !exportBtn || !clearBtn) return
-
-  function getFilters() {
-    return {
-      type: filterEl.value,
-      days: rangeEl.value === 'all' ? 'all' : Number(rangeEl.value)
-    }
-  }
-
-  function openActivityPanel() {
-    renderActivityPanel(getConfig().activityLog || [], getFilters())
-    panel.classList.remove('hidden')
-    window.alwaysHere.setClickThrough(false)
-  }
-
-  openBtn.addEventListener('click', openActivityPanel)
-  filterEl.addEventListener('change', openActivityPanel)
-  rangeEl.addEventListener('change', openActivityPanel)
-  exportBtn.addEventListener('click', async () => {
-    const entries = filterActivityLog(getConfig().activityLog || [], getFilters())
-    await window.alwaysHere.exportActivityLog?.(exportActivityLogCsv(entries))
-  })
-  clearBtn.addEventListener('click', async () => {
-    if (!confirm('确定清空所有行为记录吗？')) return
-    getConfig().activityLog = []
-    await saveConfig()
-    openActivityPanel()
-  })
-
-  closeBtn.addEventListener('click', () => {
-    panel.classList.add('hidden')
-  })
-
-  return {
-    open: openActivityPanel
-  }
 }
 
 function renderActivityPanel(log, filters = {}) {
@@ -469,15 +644,17 @@ function ensureReminderConfig(config) {
   return config.reminders
 }
 
-function applyWidgetPositions(config) {
+export function applyWidgetPositions(config) {
   for (const key in config.widgets) {
     const el = document.getElementById('widget-' + key)
     if (!el) continue
     el.classList.toggle('hidden', !config.widgets[key].enabled)
+    if (config.widgets[key].x !== undefined) el.style.left = config.widgets[key].x + 'px'
+    if (config.widgets[key].y !== undefined) el.style.top = config.widgets[key].y + 'px'
   }
 }
 
-function applyTheme(config) {
+export function applyTheme(config) {
   document.body.className = config.theme ? 'theme-' + config.theme : ''
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.theme === (config.theme || 'dark'))

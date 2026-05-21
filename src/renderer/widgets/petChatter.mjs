@@ -143,6 +143,27 @@ function getContextLines(activityContext = {}) {
   if ((activityContext.overtimeMinutes || 0) >= 30) {
     lines.push('加班了，记得收尾。')
   }
+
+  // Wageman context
+  if (activityContext.wageman) {
+    const { clockOut } = activityContext.wageman
+    if (clockOut) {
+      const now = new Date()
+      const [h, m] = clockOut.split(':').map(Number)
+      const offWorkDate = new Date(now)
+      offWorkDate.setHours(h, m, 0, 0)
+      
+      const diffMs = offWorkDate - now
+      if (diffMs > 0 && diffMs < 60 * 60 * 1000) { // Less than 1 hour
+        const mins = Math.ceil(diffMs / 60000)
+        lines.push(`还有 ${mins} 分钟下班，稳住！`)
+        lines.push(`看到终点线了，还有 ${mins} 分钟。`)
+      } else if (diffMs <= 0 && diffMs > -30 * 60 * 1000) { // Just off work
+        lines.push('已经下班啦，收工收工！')
+      }
+    }
+  }
+
   return lines
 }
 

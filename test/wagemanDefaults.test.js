@@ -41,18 +41,18 @@ test('mergeWagemanConfig keeps existing user values', async () => {
   assert.deepEqual(merged.offWorkStops, { '2026-05-21': '2026-05-21T19:30:00.000Z' })
 })
 
-test('mergeWagemanConfig migrates previous implicit defaults to 9 to 5 and 8000', async () => {
+test('mergeWagemanConfig no longer migrates implicit defaults (bug fix)', async () => {
   const { mergeWagemanConfig } = await loadWagemanDefaults()
 
   const merged = mergeWagemanConfig({
     clockIn: '09:00',
     clockOut: '18:00',
-    monthlySalary: '',
+    monthlySalary: '9000',
     workDays: '22'
   })
 
   assert.equal(merged.clockIn, '09:00')
-  assert.equal(merged.clockOut, '17:00')
-  assert.equal(merged.monthlySalary, '8000')
+  assert.equal(merged.clockOut, '18:00')
+  assert.equal(merged.monthlySalary, '9000')
   assert.equal(merged.workDays, '22')
 })

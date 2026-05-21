@@ -95,66 +95,30 @@ export async function initWageman(getConfig, saveConfig) {
   const month = now.getMonth()
 
   config.wageman = mergeWagemanConfig(config.wageman)
-
   const wc = config.wageman
   if (!wc.offWorkStops) wc.offWorkStops = {}
-  const workDaysInput = document.getElementById('wageman-workdays')
-  const workDaysLabel = document.getElementById('wageman-workdays-label')
 
   // Auto-calculate workdays with holiday data
   if (wc.workDaysAuto !== false) {
-    workDaysLabel.textContent = '获取中...'
     const holidayDays = await fetchHolidayWorkdays(year, month)
+    let label = ''
     if (holidayDays !== null) {
       wc.workDays = String(holidayDays)
-      workDaysLabel.textContent = `工作日 (${month + 1}月, 含调休)`
+      label = `工作日 (${month + 1}月, 含调休)`
     } else {
       wc.workDays = String(countWorkdays(year, month))
-      workDaysLabel.textContent = `工作日 (${month + 1}月, 未含节假日)`
+      label = `工作日 (${month + 1}月, 未含节假日)`
     }
-    workDaysInput.value = wc.workDays
     saveConfig()
+    window.dispatchEvent(new CustomEvent('wageman-workdays-autofilled', {
+      detail: { workDays: wc.workDays, label }
+    }))
   }
 
-  const clockInInput = document.getElementById('wageman-clockin')
-  const clockOutInput = document.getElementById('wageman-clockout')
-  const salaryInput = document.getElementById('wageman-salary')
-  const toggleBtn = document.getElementById('wageman-toggle')
   const stopBtn = document.getElementById('wageman-stop')
-  const inputs = document.getElementById('wageman-inputs')
 
-  clockInInput.value = wc.clockIn
-  clockOutInput.value = wc.clockOut
-  salaryInput.value = wc.monthlySalary
-  if (!workDaysInput.value) workDaysInput.value = wc.workDays || String(countWorkdays(year, month))
-
-  toggleBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    inputs.classList.toggle('collapsed')
-    toggleBtn.textContent = inputs.classList.contains('collapsed') ? '⚙' : '✕'
-  })
-
-  const saveInputs = () => {
-    wc.clockIn = clockInInput.value
-    wc.clockOut = clockOutInput.value
-    wc.monthlySalary = salaryInput.value
-    wc.workDays = workDaysInput.value
-    delete wc.offWorkStops?.[dayKey(new Date())]
-    saveConfig()
+  window.addEventListener('wageman-settings-changed', () => {
     updateWageman()
-  }
-
-  clockInInput.addEventListener('change', saveInputs)
-  clockOutInput.addEventListener('change', saveInputs)
-  salaryInput.addEventListener('input', () => {
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(saveInputs, 600)
-  })
-  // Manual edit of workdays disables auto
-  workDaysInput.addEventListener('change', () => {
-    wc.workDaysAuto = false
-    workDaysLabel.textContent = '工作日 (手动)'
-    saveInputs()
   })
 
   stopBtn.addEventListener('click', async (e) => {
@@ -185,11 +149,10 @@ export async function initWageman(getConfig, saveConfig) {
   })
 
   // Prevent drag on interactive elements
-  ;[clockInInput, clockOutInput, salaryInput, workDaysInput, toggleBtn, stopBtn].forEach(el => {
+  ;[stopBtn].forEach(el => {
     el.addEventListener('mousedown', (e) => e.stopPropagation())
   })
 
-  inputs.classList.add('collapsed')
   updateWageman()
   updateInterval = setInterval(updateWageman, 1000)
 }

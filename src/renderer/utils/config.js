@@ -18,8 +18,13 @@ const DEFAULT_REMINDERS = {
   work: { enabled: true, systemNotification: false }
 }
 
+const CURRENT_CONFIG_VERSION = 1
+
 export async function initConfig() {
   config = await window.alwaysHere.getConfig()
+  
+  migrateConfig(config)
+
   for (const key in DEFAULT_WIDGETS) {
     if (!config.widgets[key]) config.widgets[key] = { ...DEFAULT_WIDGETS[key] }
   }
@@ -32,7 +37,25 @@ export async function initConfig() {
   if (config.happiness === undefined) config.happiness = 70
   if (!config.noteText) config.noteText = ''
   if (!Array.isArray(config.activityLog)) config.activityLog = []
+  
+  if (config.configVersion !== CURRENT_CONFIG_VERSION) {
+    config.configVersion = CURRENT_CONFIG_VERSION
+    await saveConfig()
+  }
+  
   return config
+}
+
+function migrateConfig(cfg) {
+  if (!cfg.configVersion) {
+    cfg.configVersion = 0
+  }
+  
+  // Example migration:
+  // if (cfg.configVersion < 1) {
+  //   // migrate from 0 to 1
+  //   cfg.configVersion = 1
+  // }
 }
 
 function mergeReminders(reminders = {}) {
