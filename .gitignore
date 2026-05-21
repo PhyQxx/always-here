@@ -11,6 +11,9 @@ release/
 *.swp
 *.swo
 
+# AI
+.claude/
+
 # OS files
 .DS_Store
 Thumbs.db
