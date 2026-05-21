@@ -56,7 +56,20 @@
     <div class="wageman-status" id="wageman-status">请先设置上班信息</div>
     <div class="wageman-countdown" id="wageman-countdown">--:--:--</div>
     <div class="wageman-earned" id="wageman-earned">¥0.00</div>
-    <button class="wageman-stop hidden" id="wageman-stop">下班</button>
+    <div class="wageman-durations" id="wageman-durations">
+      <div class="wageman-duration-item">
+        <span>今日已工</span>
+        <strong id="wageman-duration-actual">0h 0m</strong>
+      </div>
+      <div class="wageman-duration-item">
+        <span>标准工时</span>
+        <strong id="wageman-duration-expected">0h 0m</strong>
+      </div>
+    </div>
+    <div class="wageman-actions">
+      <button class="wageman-btn start" id="wageman-start">开始上班</button>
+      <button class="wageman-btn stop hidden" id="wageman-stop">下班收工</button>
+    </div>
   </div>
 
   <div id="settings-panel" class="settings-panel hidden">
@@ -143,9 +156,6 @@
           <div class="setting-label">说话风格</div>
           <select id="pet-chat-tone" class="select-sm"></select>
         </div>
-        <div class="setting-row" data-settings-scope="pet">
-          <button type="button" id="activity-log-open" class="btn-block">查看行为记录</button>
-        </div>
 
         <div class="settings-section-title" data-settings-scope="pet">定时提醒</div>
         <div class="reminder-group" data-settings-scope="pet">
@@ -189,6 +199,10 @@
             <label class="sub-label"><input type="checkbox" id="reminder-work-notify"> 系统通知</label>
           </div>
         </div>
+
+        <div class="" data-settings-scope="pet">
+          <button type="button" id="activity-log-open" class="btn-block">查看行为记录</button>
+        </div>
       </div>
 
       <!-- Timer Tab -->
@@ -200,7 +214,9 @@
       <!-- Note Tab -->
       <div class="settings-tab-content" data-tab-content="note">
         <div class="settings-section-title" data-settings-scope="note">便签设置</div>
-        <div class="setting-row empty-state" data-settings-scope="note">暂无特定设置</div>
+        <div class="setting-row" data-settings-scope="note">
+          <label><input type="checkbox" id="setting-note-translucent"> 磨砂透明背景</label>
+        </div>
       </div>
 
       <!-- Wageman Tab -->
@@ -230,6 +246,9 @@
             <input type="text" inputmode="numeric" id="setting-wageman-workdays" class="input-sm" style="width: 60px" placeholder="自动">
           </div>
         </div>
+        <div class="setting-row" data-settings-scope="wageman">
+          <button type="button" id="activity-log-open-wageman" class="btn-block">查看打工记录</button>
+        </div>
       </div>
 
       <!-- System Tab -->
@@ -238,6 +257,14 @@
         <div class="settings-grid">
           <div class="setting-row" data-settings-scope="global"><label><input type="checkbox" id="setting-onTop" checked> 始终置顶</label></div>
           <div class="setting-row" data-settings-scope="global"><label><input type="checkbox" id="setting-autoStart"> 开机自启</label></div>
+        </div>
+
+        <div class="setting-row" data-settings-scope="global">
+          <div class="setting-label">全局缩放 (Zoom)</div>
+          <div class="setting-controls">
+            <input type="range" id="setting-global-scale" min="0.5" max="2.0" step="0.1">
+            <span class="value-label"><span id="setting-global-scale-val">1.0</span>x</span>
+          </div>
         </div>
 
         <div class="settings-section-title" data-settings-scope="global">视觉主题</div>

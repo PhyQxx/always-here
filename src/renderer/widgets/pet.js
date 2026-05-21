@@ -339,6 +339,11 @@ export async function initPet(getConfig, saveConfig) {
     if (currentAnimation === 'idle') playAction('waving')
   })
 
+  widget.addEventListener('dblclick', () => {
+    const action = pickAmbientAction(currentAnimation)
+    playAction(action)
+  })
+
   widget.addEventListener('widget-drag', (event) => {
     const action = getDragActionFromMovement(
       event.detail?.deltaX || 0,

@@ -404,6 +404,7 @@ export function initSettings(getConfig, saveConfig) {
 
   function initActivityPanel() {
     const openBtn = document.getElementById('activity-log-open')
+    const openBtnWageman = document.getElementById('activity-log-open-wageman')
     const closeBtn = document.getElementById('activity-log-close')
     const actPanel = document.getElementById('activity-panel')
     const filterEl = document.getElementById('activity-filter')
@@ -426,6 +427,7 @@ export function initSettings(getConfig, saveConfig) {
     }
 
     openBtn.addEventListener('click', openActivityPanel)
+    openBtnWageman?.addEventListener('click', openActivityPanel)
     filterEl.addEventListener('change', openActivityPanel)
     rangeEl.addEventListener('change', openActivityPanel)
     exportBtn.addEventListener('click', async () => {
@@ -544,6 +546,46 @@ export function initSettings(getConfig, saveConfig) {
       saveConfig()
     })
   })
+
+  const scaleInput = document.getElementById('setting-global-scale')
+  const scaleVal = document.getElementById('setting-global-scale-val')
+  if (scaleInput) {
+    scaleInput.value = getConfig().globalScale || 1.0
+    if (scaleVal) scaleVal.textContent = scaleInput.value
+    scaleInput.addEventListener('input', () => {
+      const val = scaleInput.value
+      if (scaleVal) scaleVal.textContent = val
+      getConfig().globalScale = Number(val)
+      applyScale(getConfig())
+    })
+    scaleInput.addEventListener('change', () => saveConfig())
+  }
+
+  const noteTransCheck = document.getElementById('setting-note-translucent')
+  if (noteTransCheck) {
+    noteTransCheck.checked = getConfig().noteTranslucent || false
+    noteTransCheck.addEventListener('change', () => {
+      getConfig().noteTranslucent = noteTransCheck.checked
+      applyNoteStyle(getConfig())
+      saveConfig()
+    })
+  }
+
+  function applyScale(config) {
+    const scale = config.globalScale || 1.0
+    document.querySelectorAll('.widget').forEach(w => {
+      w.style.transform = `scale(${scale})`
+    })
+  }
+
+  function applyNoteStyle(config) {
+    const note = document.getElementById('widget-note')
+    if (note) note.classList.toggle('translucent', config.noteTranslucent)
+  }
+
+  // Initial apply
+  applyScale(getConfig())
+  applyNoteStyle(getConfig())
 
   initPetSelect(petSelect)
   initPetFolder()

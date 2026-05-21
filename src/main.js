@@ -25,6 +25,7 @@ const DEFAULT_CONFIG = {
   },
   alwaysOnTop: true,
   opacity: 1.0,
+  globalScale: 1.0,
   theme: 'dark',
   autoStart: false,
   petId: 'hina',
@@ -43,6 +44,7 @@ const DEFAULT_CONFIG = {
   },
   happiness: 70,
   noteText: '',
+  noteTranslucent: false,
   wageman: {
     clockIn: '09:00',
     clockOut: '17:00',

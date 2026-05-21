@@ -33,6 +33,20 @@ body.theme-sakura { --bg: rgba(60, 20, 40, 0.75); --bg-solid: rgba(60, 20, 40, 0
   filter: drop-shadow(0 0 14px var(--accent));
 }
 
+.widget.translucent {
+  background: rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(4px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.widget.translucent .note-header {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.widget.translucent textarea {
+  background: transparent !important;
+}
+
 .widget:hover {
   transform: scale(1.02);
 }

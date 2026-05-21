@@ -11,37 +11,88 @@
 }
 
 .wageman-countdown {
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 300;
   text-align: center;
   font-variant-numeric: tabular-nums;
   letter-spacing: 1px;
   line-height: 1.2;
-  margin: 4px 0;
+  margin: 8px 0;
 }
 
 .wageman-earned {
-  font-size: 20px;
+  font-size: 24px;
+  font-weight: 700;
   text-align: center;
   color: var(--accent);
-  font-weight: 500;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
-.wageman-stop {
-  width: 100%;
-  padding: 7px 10px;
-  margin-bottom: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
+.wageman-durations {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.wageman-duration-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.wageman-duration-item span {
+  font-size: 10px;
+  opacity: 0.5;
+  text-transform: uppercase;
+}
+
+.wageman-duration-item strong {
   font-size: 13px;
+  font-weight: 600;
 }
 
-.wageman-stop.hidden {
-  display: none;
+.wageman-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wageman-btn {
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wageman-btn.start {
+  background: var(--accent);
+  color: white;
+}
+
+.wageman-btn.start:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.wageman-btn.stop {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.wageman-btn.stop:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #ff4d4f;
+  color: #ff4d4f;
 }
 
 .wageman-header {
@@ -56,74 +107,6 @@
   opacity: 0.6;
 }
 
-.wageman-toggle {
-  background: none;
-  border: none;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px 6px;
-  opacity: 0.6;
-}
-
-.wageman-toggle:hover {
-  opacity: 1;
-}
-
-.wageman-inputs {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding-top: 10px;
-  margin-top: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.wageman-inputs.collapsed {
-  display: none;
-}
-
-.wageman-input-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.wageman-input-row label {
-  font-size: 12px;
-  opacity: 0.7;
-  min-width: 40px;
-}
-
-.wageman-input-row input[type="time"] {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
-  color: var(--text);
-  padding: 3px 8px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-
-.wageman-input-row input[type="time"]:focus,
-.wageman-input-row input[type="number"]:focus {
-  border-color: var(--accent);
-}
-
-.wageman-input-row input[type="number"] {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
-  color: var(--text);
-  padding: 3px 8px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-
-.wageman-input-row input[type="number"]::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+.hidden {
+  display: none !important;
 }

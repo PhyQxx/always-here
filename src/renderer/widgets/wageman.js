@@ -5,23 +5,6 @@ import { mergeWagemanConfig } from './wagemanDefaults.mjs'
 let getConfigFn = null
 let saveConfigFn = null
 let updateInterval = null
-let saveTimeout = null
-
-function formatCountdown(ms) {
-  if (ms <= 0) return '00:00:00'
-  const totalSec = Math.floor(ms / 1000)
-  const h = Math.floor(totalSec / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-}
-
-function todayFromTime(timeStr) {
-  const [h, m] = timeStr.split(':').map(Number)
-  const d = new Date()
-  d.setHours(h, m, 0, 0)
-  return d
-}
 
 function countWorkdays(year, month) {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -44,7 +27,6 @@ async function fetchHolidayWorkdays(year, month) {
       const key = `${month + 1}-${d}`
       const info = holidays[key]
       if (info) {
-        // info.holiday=true → 休息日; info.holiday=false → 调休上班
         if (!info.holiday) count++
       } else {
         const dow = new Date(year, month, d).getDay()
@@ -65,9 +47,13 @@ function updateWageman() {
   const earnedEl = document.getElementById('wageman-earned')
   const statusEl = document.getElementById('wageman-status')
   const stopBtn = document.getElementById('wageman-stop')
+  const startBtn = document.getElementById('wageman-start')
+  const actualDurEl = document.getElementById('wageman-duration-actual')
+  const expectedDurEl = document.getElementById('wageman-duration-expected')
 
+  const now = new Date()
   const state = getWagemanState({
-    now: new Date(),
+    now,
     clockIn,
     clockOut,
     monthlySalary,
@@ -75,14 +61,47 @@ function updateWageman() {
     offWorkStops: wc.offWorkStops || {}
   })
 
+  const today = dayKey(now)
+  const startEvent = config.activityLog?.find(e => e.type === 'work-start' && e.dayKey === today)
+  const workStarted = startEvent ? new Date(startEvent.createdAt) : null
+  const workStopped = wc.offWorkStops[today]
+
+  startBtn.classList.toggle('hidden', !!workStarted)
+  stopBtn.classList.toggle('hidden', !workStarted || !!workStopped)
+
   if (state.mode === 'missing') {
     statusEl.textContent = '请先设置上班信息'
+  } else if (workStopped) {
+    statusEl.textContent = '今日已收工'
+  } else if (!workStarted) {
+    statusEl.textContent = '还没上班呢'
   } else {
     statusEl.textContent = state.statusText
   }
-  countdownEl.textContent = state.countdownText
+
+  countdownEl.textContent = workStopped ? '明天见！' : state.countdownText
   earnedEl.textContent = state.earnedText
-  stopBtn.classList.toggle('hidden', !state.showStopButton)
+
+  // Update Durations
+  if (actualDurEl && expectedDurEl && clockIn && clockOut) {
+    const [inH, inM] = clockIn.split(':').map(Number)
+    const [outH, outM] = clockOut.split(':').map(Number)
+    let expMs = (outH * 60 + outM - (inH * 60 + inM)) * 60000
+    if (expMs < 0) expMs += 24 * 3600000
+    
+    const expH = Math.floor(expMs / 3600000)
+    const expM = Math.round((expMs % 3600000) / 60000)
+    expectedDurEl.textContent = `${expH}h ${expM}m`
+
+    let actMs = 0
+    if (workStarted) {
+      const end = workStopped ? new Date(workStopped) : now
+      actMs = end - workStarted
+    }
+    const actH = Math.floor(actMs / 3600000)
+    const actM = Math.round((actMs % 3600000) / 60000)
+    actualDurEl.textContent = `${actH}h ${actM}m`
+  }
 }
 
 export async function initWageman(getConfig, saveConfig) {
@@ -98,7 +117,6 @@ export async function initWageman(getConfig, saveConfig) {
   const wc = config.wageman
   if (!wc.offWorkStops) wc.offWorkStops = {}
 
-  // Auto-calculate workdays with holiday data
   if (wc.workDaysAuto !== false) {
     const holidayDays = await fetchHolidayWorkdays(year, month)
     let label = ''
@@ -116,8 +134,22 @@ export async function initWageman(getConfig, saveConfig) {
   }
 
   const stopBtn = document.getElementById('wageman-stop')
+  const startBtn = document.getElementById('wageman-start')
 
   window.addEventListener('wageman-settings-changed', () => {
+    updateWageman()
+  })
+
+  startBtn.addEventListener('click', async (e) => {
+    e.stopPropagation()
+    const now = new Date()
+    const today = dayKey(now)
+    appendActivityLog(config, {
+      type: 'work-start',
+      dayKey: today,
+      createdAt: now.toISOString()
+    })
+    await saveConfig()
     updateWageman()
   })
 
@@ -148,8 +180,7 @@ export async function initWageman(getConfig, saveConfig) {
     updateWageman()
   })
 
-  // Prevent drag on interactive elements
-  ;[stopBtn].forEach(el => {
+  ;[stopBtn, startBtn].forEach(el => {
     el.addEventListener('mousedown', (e) => e.stopPropagation())
   })
 
