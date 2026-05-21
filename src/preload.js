@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('alwaysHere', {
   listPets: () => ipcRenderer.invoke('list-pets'),
   getPetSpritesheet: (petId) => ipcRenderer.invoke('get-pet-spritesheet', petId),
   choosePetFolder: () => ipcRenderer.invoke('choose-pet-folder'),
+  importPetPackage: () => ipcRenderer.invoke('import-pet-package'),
+  openExternal: (url) => ipcRenderer.invoke('open-external-url', url),
   exportActivityLog: (csvText) => ipcRenderer.invoke('export-activity-log', csvText),
   showNotification: (payload) => ipcRenderer.invoke('show-notification', payload),
   onShowSettings: (callback) => ipcRenderer.on('show-settings', callback),

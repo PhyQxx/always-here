@@ -1,6 +1,7 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { execFile } = require('child_process')
 
 const CODEX_PETS_DIR = path.join(os.homedir(), '.codex', 'pets')
 const BUILTIN_PETS_DIR = path.join(__dirname, 'renderer', 'assets', 'pets')
@@ -21,11 +22,7 @@ function isInside(parent, child) {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
-function readPetManifest(petsRoot, folderName) {
-  const petDir = path.resolve(petsRoot, folderName)
-  const root = path.resolve(petsRoot)
-  if (!isInside(root, petDir)) return null
-
+function readPetManifestDirectory(petDir, folderName) {
   const manifestPath = path.join(petDir, 'pet.json')
   if (!fs.existsSync(manifestPath)) return null
 
@@ -51,6 +48,13 @@ function readPetManifest(petsRoot, folderName) {
   } catch (error) {
     return null
   }
+}
+
+function readPetManifest(petsRoot, folderName) {
+  const petDir = path.resolve(petsRoot, folderName)
+  const root = path.resolve(petsRoot)
+  if (!isInside(root, petDir)) return null
+  return readPetManifestDirectory(petDir, folderName)
 }
 
 function readPetsFromRoot(petsRoot) {
@@ -123,10 +127,111 @@ function getPetSpritesheetDataUrl(petsRoot = CODEX_PETS_DIR, petId, builtInPetsR
   }
 }
 
+function defaultExtractZip(zipPath, destination) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'tar',
+      ['-xf', zipPath, '-C', destination],
+      (error) => {
+        if (!error) {
+          resolve()
+          return
+        }
+        const script = [
+          '& {',
+          'param($zipPath, $destination)',
+          '$ErrorActionPreference = "Stop"',
+          'Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force',
+          '}'
+        ].join(' ')
+        execFile(
+          'powershell.exe',
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script, zipPath, destination],
+          (fallbackError) => {
+            if (fallbackError) reject(fallbackError)
+            else resolve()
+          }
+        )
+      }
+    )
+  })
+}
+
+function findExtractedPetRoot(extractDir) {
+  const topLevelManifest = path.join(extractDir, 'pet.json')
+  if (fs.existsSync(topLevelManifest)) return extractDir
+
+  const candidates = fs.readdirSync(extractDir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => path.join(extractDir, entry.name))
+    .filter(dir => fs.existsSync(path.join(dir, 'pet.json')))
+
+  return candidates.length === 1 ? candidates[0] : null
+}
+
+function copyDirectoryContents(sourceDir, targetDir) {
+  fs.mkdirSync(targetDir, { recursive: true })
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    const source = path.join(sourceDir, entry.name)
+    const target = path.join(targetDir, entry.name)
+    if (!isInside(sourceDir, source) || !isInside(targetDir, target)) continue
+    if (entry.isDirectory()) {
+      copyDirectoryContents(source, target)
+    } else if (entry.isFile()) {
+      fs.copyFileSync(source, target)
+    }
+  }
+}
+
+async function importCodexPetPackage(petsRoot = CODEX_PETS_DIR, zipPath, options = {}) {
+  if (typeof zipPath !== 'string' || !zipPath.toLowerCase().endsWith('.zip')) {
+    throw new Error('请选择 .codex-pet.zip 或 .zip 宠物包')
+  }
+
+  const root = path.resolve(petsRoot)
+  fs.mkdirSync(root, { recursive: true })
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'always-here-pet-import-'))
+  const extractZip = options.extractZip || defaultExtractZip
+
+  try {
+    await extractZip(zipPath, tempDir)
+    const petRoot = findExtractedPetRoot(tempDir)
+    if (!petRoot || !isInside(tempDir, petRoot)) {
+      throw new Error('没有找到有效的宠物配置 pet.json')
+    }
+
+    const manifest = readPetManifestDirectory(petRoot, path.basename(petRoot))
+    if (!manifest) {
+      throw new Error('没有找到有效的宠物配置 pet.json')
+    }
+
+    const targetDir = path.join(root, manifest.id)
+    if (!isInside(root, targetDir)) {
+      throw new Error('宠物包 id 不安全')
+    }
+    fs.rmSync(targetDir, { recursive: true, force: true })
+    copyDirectoryContents(petRoot, targetDir)
+
+    const imported = readPetManifest(root, manifest.id)
+    if (!imported) {
+      throw new Error('宠物包导入失败')
+    }
+    return {
+      id: imported.id,
+      folderName: imported.folderName,
+      displayName: imported.displayName,
+      description: imported.description
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
 module.exports = {
   BUILTIN_PETS_DIR,
   CODEX_PETS_DIR,
   findPetById,
   getPetSpritesheetDataUrl,
+  importCodexPetPackage,
   listPets
 }

@@ -1,8 +1,8 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, Notification } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, Notification, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { APP_ICON_PNG_PATH, TRAY_ICON_PNG_PATH, getNotificationOptions } = require('./appIcon')
-const { CODEX_PETS_DIR, getPetSpritesheetDataUrl, listPets } = require('./petStore')
+const { CODEX_PETS_DIR, getPetSpritesheetDataUrl, importCodexPetPackage, listPets } = require('./petStore')
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
 
@@ -198,6 +198,23 @@ ipcMain.handle('choose-pet-folder', async () => {
   })
   if (result.canceled || !result.filePaths.length) return null
   return result.filePaths[0]
+})
+ipcMain.handle('open-external-url', (_, url) => {
+  if (url !== 'https://codex-pets.net/') return false
+  shell.openExternal(url)
+  return true
+})
+ipcMain.handle('import-pet-package', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '导入宠物包',
+    filters: [
+      { name: 'Codex 宠物包', extensions: ['zip'] },
+      { name: 'ZIP 压缩包', extensions: ['zip'] }
+    ],
+    properties: ['openFile']
+  })
+  if (result.canceled || !result.filePaths.length) return null
+  return importCodexPetPackage(getConfiguredPetFolder(), result.filePaths[0])
 })
 ipcMain.handle('export-activity-log', async (_, csvText) => {
   const result = await dialog.showSaveDialog(mainWindow, {

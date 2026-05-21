@@ -88,6 +88,28 @@
   font-size: 13px;
 }
 
+.pet-package-row {
+  font-size: 13px;
+}
+
+.pet-package-row p {
+  margin: 6px 0 8px;
+  max-width: 320px;
+  line-height: 1.45;
+  opacity: 0.78;
+}
+
+.pet-package-row a {
+  color: var(--accent);
+}
+
+.pet-package-row span {
+  display: block;
+  margin-top: 7px;
+  min-height: 16px;
+  opacity: 0.78;
+}
+
 .pet-folder-value {
   max-width: 280px;
   margin: 6px 0;

@@ -8,6 +8,7 @@ const {
   BUILTIN_PETS_DIR,
   findPetById,
   getPetSpritesheetDataUrl,
+  importCodexPetPackage,
   listPets
 } = require('../src/petStore')
 
@@ -146,4 +147,41 @@ test('getPetSpritesheetDataUrl falls back to built-in pets when configured root 
 
 test('built-in pets directory points at packaged renderer assets', () => {
   assert.equal(BUILTIN_PETS_DIR, path.resolve(__dirname, '../src/renderer/assets/pets'))
+})
+
+test('importCodexPetPackage extracts a valid top-level codex pet package', async () => {
+  const root = makeTempPetsRoot()
+  const packagePath = path.join(os.tmpdir(), 'poplar.codex-pet.zip')
+
+  const imported = await importCodexPetPackage(root, packagePath, {
+    extractZip: async (_zipPath, destination) => {
+      fs.writeFileSync(path.join(destination, 'pet.json'), JSON.stringify({
+        id: 'poplar',
+        displayName: 'Poplar',
+        description: 'A downloaded pet.',
+        spritesheetPath: 'spritesheet.webp'
+      }))
+      fs.writeFileSync(path.join(destination, 'spritesheet.webp'), 'sprite-bytes')
+    }
+  })
+
+  assert.equal(imported.id, 'poplar')
+  assert.equal(imported.folderName, 'poplar')
+  assert.equal(imported.displayName, 'Poplar')
+  assert.equal(fs.existsSync(path.join(root, 'poplar', 'pet.json')), true)
+  assert.equal(findPetById(root, 'poplar').spritesheetPath, path.join(root, 'poplar', 'spritesheet.webp'))
+})
+
+test('importCodexPetPackage rejects packages without a valid pet manifest', async () => {
+  const root = makeTempPetsRoot()
+  const packagePath = path.join(os.tmpdir(), 'broken.codex-pet.zip')
+
+  await assert.rejects(
+    () => importCodexPetPackage(root, packagePath, {
+      extractZip: async (_zipPath, destination) => {
+        fs.writeFileSync(path.join(destination, 'spritesheet.webp'), 'sprite-bytes')
+      }
+    }),
+    /没有找到有效的宠物配置/
+  )
 })

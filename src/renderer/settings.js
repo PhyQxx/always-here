@@ -119,6 +119,7 @@ export function initSettings(getConfig, saveConfig) {
 
   initPetSelect(petSelect, getConfig, saveConfig)
   initPetFolder(getConfig, saveConfig)
+  initPetPackageImport(petSelect, getConfig, saveConfig)
   initReminderSettings(getConfig, saveConfig)
   const petChatSettings = initPetChatSettings(getConfig, saveConfig)
   const activityPanel = initActivityPanel(getConfig, saveConfig)
@@ -202,6 +203,42 @@ function initPetFolder(getConfig, saveConfig) {
     render()
     if (petSelect) await refreshPetSelect(petSelect, getConfig, saveConfig)
     window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+  })
+}
+
+function initPetPackageImport(petSelect, getConfig, saveConfig) {
+  const importBtn = document.getElementById('pet-package-import')
+  const statusEl = document.getElementById('pet-package-import-status')
+  const downloadLink = document.getElementById('pet-download-link')
+  if (!importBtn || !statusEl) return
+
+  downloadLink?.addEventListener('click', (event) => {
+    event.preventDefault()
+    window.alwaysHere.openExternal?.('https://codex-pets.net/')
+  })
+
+  importBtn.addEventListener('click', async () => {
+    const originalText = importBtn.textContent
+    importBtn.disabled = true
+    importBtn.textContent = '导入中...'
+    statusEl.textContent = ''
+    try {
+      const imported = await window.alwaysHere.importPetPackage()
+      if (!imported) {
+        statusEl.textContent = '已取消导入。'
+        return
+      }
+      getConfig().petId = imported.id
+      await saveConfig()
+      if (petSelect) await refreshPetSelect(petSelect, getConfig, saveConfig)
+      window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+      statusEl.textContent = `已导入：${imported.displayName || imported.id}`
+    } catch (error) {
+      statusEl.textContent = error.message || '导入失败，请确认宠物包是否完整。'
+    } finally {
+      importBtn.disabled = false
+      importBtn.textContent = originalText
+    }
   })
 }
 
