@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Always Here</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="widgets/clock.css">
+  <link rel="stylesheet" href="widgets/pet.css">
+  <link rel="stylesheet" href="widgets/timer.css">
+  <link rel="stylesheet" href="widgets/note.css">
+  <link rel="stylesheet" href="widgets/wageman.css">
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div id="widget-clock" class="widget" data-widget="clock">
+    <div class="clock-face">
+      <div class="clock-time" id="clock-time">00:00:00</div>
+      <div class="clock-date" id="clock-date"></div>
+    </div>
+  </div>
+
+  <div id="widget-pet" class="widget" data-widget="pet">
+    <div class="pet-container">
+      <canvas id="pet-canvas" width="130" height="150"></canvas>
+    </div>
+    <div class="pet-bubble hidden" id="pet-bubble">
+      <span id="pet-bubble-text"></span>
+      <div class="pet-bubble-actions hidden" id="pet-bubble-actions">
+        <button type="button" data-result="done">做了</button>
+        <button type="button" data-result="skipped">没做</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="widget-timer" class="widget" data-widget="timer">
+    <div class="timer-display" id="timer-display">00:00.00</div>
+    <div class="timer-buttons">
+      <button class="timer-btn" id="timer-start">开始</button>
+      <button class="timer-btn" id="timer-lap">计次</button>
+      <button class="timer-btn" id="timer-reset">重置</button>
+    </div>
+    <div class="timer-laps" id="timer-laps"></div>
+  </div>
+
+  <div id="widget-note" class="widget" data-widget="note">
+    <div class="note-header">
+      <span class="note-title">便签</span>
+    </div>
+    <textarea class="note-content" id="note-content" placeholder="在这里写点什么..."></textarea>
+  </div>
+
+  <div id="widget-wageman" class="widget" data-widget="wageman">
+    <div class="wageman-header">
+      <span class="wageman-title">打工倒计时</span>
+      <button class="wageman-toggle" id="wageman-toggle">⚙</button>
+    </div>
+    <div class="wageman-status" id="wageman-status">请先设置上班信息</div>
+    <div class="wageman-countdown" id="wageman-countdown">--:--:--</div>
+    <div class="wageman-earned" id="wageman-earned">¥0.00</div>
+    <button class="wageman-stop hidden" id="wageman-stop">下班</button>
+    <div class="wageman-inputs collapsed" id="wageman-inputs">
+      <div class="wageman-input-row">
+        <label>上班</label>
+        <input type="time" id="wageman-clockin" value="09:00">
+      </div>
+      <div class="wageman-input-row">
+        <label>下班</label>
+        <input type="time" id="wageman-clockout" value="17:00">
+      </div>
+      <div class="wageman-input-row">
+        <label>月薪</label>
+        <input type="text" inputmode="decimal" id="wageman-salary" value="8000" placeholder="输入月薪...">
+      </div>
+      <div class="wageman-input-row">
+        <label id="wageman-workdays-label">工作日</label>
+        <input type="text" inputmode="numeric" id="wageman-workdays" placeholder="自动">
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-panel" class="settings-panel hidden">
+    <h3 id="settings-title">设置</h3>
+    <div class="setting-row" data-settings-scope="clock"><label><input type="checkbox" id="setting-clock" checked> 时钟</label></div>
+    <div class="setting-row" data-settings-scope="pet"><label><input type="checkbox" id="setting-pet" checked> 宠物</label></div>
+    <div class="setting-row" data-settings-scope="timer"><label><input type="checkbox" id="setting-timer" checked> 秒表</label></div>
+    <div class="setting-row" data-settings-scope="note"><label><input type="checkbox" id="setting-note" checked> 便签</label></div>
+    <div class="setting-row" data-settings-scope="wageman"><label><input type="checkbox" id="setting-wageman" checked> 打工倒计时</label></div>
+    <div class="setting-row" data-settings-scope="global"><label><input type="checkbox" id="setting-onTop" checked> 始终置顶</label></div>
+    <div class="setting-row" data-settings-scope="global"><label><input type="checkbox" id="setting-autoStart"> 开机自启</label></div>
+    <div class="setting-row pet-setting-row" data-settings-scope="pet">
+      <label for="setting-pet-select">宠物</label>
+      <select id="setting-pet-select"></select>
+    </div>
+    <div class="setting-row pet-folder-row" data-settings-scope="pet">
+      <label>宠物文件夹</label>
+      <div class="pet-folder-value" id="setting-pet-folder"></div>
+      <button type="button" id="setting-pet-folder-choose">选择文件夹</button>
+    </div>
+    <div class="setting-row reminders-row" data-settings-scope="pet">
+      <label><input type="checkbox" id="reminder-hourly-enabled"> 整点报时</label>
+      <label><input type="checkbox" id="reminder-hourly-notify"> 系统通知</label>
+    </div>
+    <div class="setting-row reminders-row" data-settings-scope="pet">
+      <label><input type="checkbox" id="reminder-water-enabled"> 喝水提醒</label>
+      <input type="number" id="reminder-water-interval" min="1" step="1">
+      <span>分钟</span>
+      <label><input type="checkbox" id="reminder-water-notify"> 系统通知</label>
+    </div>
+    <div class="setting-row reminders-row" data-settings-scope="pet">
+      <label><input type="checkbox" id="reminder-sedentary-enabled"> 久坐提醒</label>
+      <input type="number" id="reminder-sedentary-interval" min="1" step="1">
+      <span>分钟</span>
+      <label><input type="checkbox" id="reminder-sedentary-notify"> 系统通知</label>
+    </div>
+    <div class="setting-row reminders-row" data-settings-scope="pet wageman">
+      <label><input type="checkbox" id="reminder-work-enabled"> 工作时间提醒</label>
+      <label><input type="checkbox" id="reminder-work-notify"> 系统通知</label>
+    </div>
+    <div class="setting-row" data-settings-scope="pet"><button type="button" id="activity-log-open">行为记录</button></div>
+    <div class="setting-row" data-settings-scope="global">
+      <label>主题</label>
+      <div class="theme-options">
+        <button class="theme-btn active" data-theme="dark">🌙</button>
+        <button class="theme-btn" data-theme="ocean">🌊</button>
+        <button class="theme-btn" data-theme="forest">🌲</button>
+        <button class="theme-btn" data-theme="sakura">🌸</button>
+      </div>
+    </div>
+    <div class="setting-row version-row" data-settings-scope="global">
+      <span id="app-version">版本: 正在获取...</span>
+      <button id="check-update-btn">检查更新</button>
+    </div>
+    <div class="setting-row" data-settings-scope="always"><button id="settings-close">关闭</button></div>
+  </div>
+
+  <div id="activity-panel" class="activity-panel hidden">
+    <div class="activity-panel-header">
+      <h3>行为记录</h3>
+      <button type="button" id="activity-log-close">关闭</button>
+    </div>
+    <div class="activity-summary" id="activity-summary"></div>
+    <div class="activity-chart" id="activity-chart"></div>
+    <div class="activity-analysis" id="activity-analysis"></div>
+    <div class="activity-list" id="activity-list"></div>
+  </div>
+
+  <script type="module" src="index.js"></script>
+</body>
+</html>

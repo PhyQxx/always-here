@@ -1,0 +1,64 @@
+#widget-timer {
+  padding: 14px 20px;
+  min-width: 180px;
+  cursor: grab;
+}
+
+.timer-display {
+  font-size: 32px;
+  font-weight: 300;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.timer-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.timer-btn {
+  padding: 4px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+
+.timer-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.timer-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.timer-laps {
+  max-height: 80px;
+  overflow-y: auto;
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.timer-laps::-webkit-scrollbar {
+  width: 3px;
+}
+
+.timer-laps::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.lap-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}

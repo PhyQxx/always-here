@@ -1,0 +1,34 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: transparent;
+  overflow: hidden;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  user-select: none;
+}
+
+body { --bg: rgba(30, 30, 50, 0.75); --bg-solid: rgba(30, 30, 50, 0.92); --accent: #7c6ff7; --text: #fff; }
+body.theme-ocean { --bg: rgba(10, 40, 70, 0.75); --bg-solid: rgba(10, 40, 70, 0.92); --accent: #38bdf8; }
+body.theme-forest { --bg: rgba(20, 45, 20, 0.75); --bg-solid: rgba(20, 45, 20, 0.92); --accent: #4ade80; }
+body.theme-sakura { --bg: rgba(60, 20, 40, 0.75); --bg-solid: rgba(60, 20, 40, 0.92); --accent: #f472b6; --text: #ffe4f0; }
+
+.widget {
+  position: fixed;
+  border-radius: 16px;
+  background: var(--bg);
+  backdrop-filter: blur(12px);
+  color: var(--text);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.widget.hidden {
+  display: none;
+}
+
+.widget:hover {
+  transform: scale(1.02);
+}

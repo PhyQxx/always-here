@@ -1,0 +1,33 @@
+{
+  "name": "always-here",
+  "version": "1.1.0",
+  "description": "A desktop widget tool with clock, pet and more",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "test": "node --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.always-here.app",
+    "productName": "Always Here",
+    "win": {
+      "icon": "build/icon.ico",
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
+  }
+}

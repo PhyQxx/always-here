@@ -1,0 +1,129 @@
+#widget-wageman {
+  padding: 14px 20px;
+  min-width: 200px;
+  cursor: grab;
+}
+
+.wageman-status {
+  font-size: 12px;
+  opacity: 0.6;
+  text-align: center;
+}
+
+.wageman-countdown {
+  font-size: 36px;
+  font-weight: 300;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  line-height: 1.2;
+  margin: 4px 0;
+}
+
+.wageman-earned {
+  font-size: 20px;
+  text-align: center;
+  color: var(--accent);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.wageman-stop {
+  width: 100%;
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.wageman-stop.hidden {
+  display: none;
+}
+
+.wageman-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.wageman-title {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.wageman-toggle {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  opacity: 0.6;
+}
+
+.wageman-toggle:hover {
+  opacity: 1;
+}
+
+.wageman-inputs {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 10px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wageman-inputs.collapsed {
+  display: none;
+}
+
+.wageman-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wageman-input-row label {
+  font-size: 12px;
+  opacity: 0.7;
+  min-width: 40px;
+}
+
+.wageman-input-row input[type="time"] {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 3px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.wageman-input-row input[type="time"]:focus,
+.wageman-input-row input[type="number"]:focus {
+  border-color: var(--accent);
+}
+
+.wageman-input-row input[type="number"] {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 3px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.wageman-input-row input[type="number"]::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8">
+<style>
+body { background: #222; color: #fff; font-family: sans-serif; padding: 10px; }
+.grid { display: grid; gap: 4px; }
+.cell { position: relative; border: 1px solid #444; background: #111; }
+.cell canvas { display: block; }
+.label { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); font-size: 10px; text-align: center; padding: 2px; }
+h2 { margin-top: 20px; }
+</style>
+</head>
+<body>
+<h2>Spritesheet Preview: 9 rows × 8 columns</h2>
+<div id="grid"></div>
+<script>
+const img = new Image();
+img.onload = () => {
+  const W = img.width, H = img.height;
+  const ROWS = 9, COLS = 8;
+  const strideY = 209, strideX = 192;
+  const contentH = 198;
+
+  const grid = document.getElementById('grid');
+  grid.style.gridTemplateColumns = 'repeat(' + COLS + ', 100px)';
+
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 96; canvas.height = 96;
+      const ctx = canvas.getContext('2d');
+
+      const sx = col * strideX;
+      const sy = row * strideY + (row === 0 ? 0 : 0);
+      const sw = strideX;
+      const sh = contentH;
+
+      // Check if this cell has content
+      const tc = document.createElement('canvas');
+      tc.width = sw; tc.height = sh;
+      const tctx = tc.getContext('2d');
+      tctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      const data = tctx.getImageData(0, 0, sw, sh).data;
+      let hasContent = false;
+      for (let i = 3; i < data.length; i += 16) {
+        if (data[i] > 20) { hasContent = true; break; }
+      }
+
+      if (hasContent) {
+        const scale = Math.min(94 / sw, 94 / sh);
+        const dw = sw * scale, dh = sh * scale;
+        ctx.drawImage(img, sx, sy, sw, sh, (96-dw)/2, (96-dh)/2, dw, dh);
+      }
+
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = 'R' + row + 'C' + col + (hasContent ? '' : ' (empty)');
+      cell.appendChild(canvas);
+      cell.appendChild(label);
+      grid.appendChild(cell);
+    }
+  }
+
+  // Print frame coordinates for non-empty cells
+  console.log('=== Frame coordinates ===');
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const sx = col * strideX;
+      const sy = row * strideY;
+      const tc = document.createElement('canvas');
+      tc.width = strideX; tc.height = contentH;
+      const tctx = tc.getContext('2d');
+      tctx.drawImage(img, sx, sy, strideX, contentH, 0, 0, strideX, contentH);
+      const data = tctx.getImageData(0, 0, strideX, contentH).data;
+      let hasContent = false;
+      for (let i = 3; i < data.length; i += 16) {
+        if (data[i] > 20) { hasContent = true; break; }
+      }
+      if (hasContent) {
+        console.log('row' + row + '_col' + col + ': { x: ' + sx + ', y: ' + sy + ', w: ' + strideX + ', h: ' + contentH + ' },');
+      }
+    }
+  }
+  console.log('DONE');
+};
+img.src = 'spritesheet.webp';
+</script>
+</body></html>

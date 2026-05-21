@@ -1,0 +1,78 @@
+#widget-pet {
+  background: transparent;
+  backdrop-filter: none;
+  cursor: grab;
+}
+
+.pet-container {
+  width: 130px;
+  height: 150px;
+  cursor: grab;
+}
+
+#pet-canvas {
+  width: 130px;
+  height: 150px;
+}
+
+.pet-bubble {
+  position: absolute;
+  top: -58px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 170px;
+  max-width: 280px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg-solid);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.42;
+  text-align: center;
+  white-space: normal;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  animation: petBubbleIn 0.18s ease;
+  pointer-events: auto;
+}
+
+.pet-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--bg-solid);
+}
+
+.pet-bubble.hidden {
+  display: none;
+}
+
+.pet-bubble-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.pet-bubble-actions.hidden {
+  display: none;
+}
+
+.pet-bubble-actions button {
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+@keyframes petBubbleIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
