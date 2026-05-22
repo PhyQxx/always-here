@@ -329,6 +329,9 @@ export async function initPet(getConfig, saveConfig) {
     const result = event.target?.dataset?.result
     if (result === 'done' || result === 'skipped') recordReminderResult(result)
   })
+  bubbleActions?.addEventListener('mousedown', (event) => {
+    event.stopPropagation()
+  })
 
   widget.addEventListener('mouseenter', () => {
     if (currentAnimation === 'idle') playAction('waving')

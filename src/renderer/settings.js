@@ -12,6 +12,7 @@ import {
   getSettingsTitle,
   isSettingsRowVisible
 } from './settingsScopes.mjs'
+import { applyWidgetPositions, applyTheme } from './utils/config.js'
 import { PET_CHAT_TONES, normalizePetChatSettings } from './widgets/petChatter.mjs'
 import { showToast, showConfirm } from './utils/ui.mjs'
 
@@ -523,7 +524,7 @@ export function initSettings(getConfig, saveConfig) {
     if (!check) return
     check.addEventListener('change', () => {
       getConfig().widgets[key].enabled = check.checked
-      applyWidgetPositions(getConfig())
+      applyWidgetPositions()
       saveConfig()
     })
   })
@@ -542,7 +543,7 @@ export function initSettings(getConfig, saveConfig) {
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       getConfig().theme = btn.dataset.theme
-      applyTheme(getConfig())
+      applyTheme()
       saveConfig()
     })
   })
@@ -702,19 +703,3 @@ function ensureReminderConfig(config) {
   return config.reminders
 }
 
-export function applyWidgetPositions(config) {
-  for (const key in config.widgets) {
-    const el = document.getElementById('widget-' + key)
-    if (!el) continue
-    el.classList.toggle('hidden', !config.widgets[key].enabled)
-    if (config.widgets[key].x !== undefined) el.style.left = config.widgets[key].x + 'px'
-    if (config.widgets[key].y !== undefined) el.style.top = config.widgets[key].y + 'px'
-  }
-}
-
-export function applyTheme(config) {
-  document.body.className = config.theme ? 'theme-' + config.theme : ''
-  document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.theme === (config.theme || 'dark'))
-  })
-}

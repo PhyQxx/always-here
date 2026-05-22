@@ -2,7 +2,8 @@ const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, No
 const path = require('path')
 const fs = require('fs')
 const { APP_ICON_PNG_PATH, TRAY_ICON_PNG_PATH, getNotificationOptions } = require('./appIcon')
-const { CODEX_PETS_DIR, getPetSpritesheetDataUrl, importCodexPetPackage, listPets } = require('./petStore')
+const https = require('https')
+const { CODEX_PETS_DIR, getPetSpritesheetDataUrl, importCodexPetPackage, isInside, listPets } = require('./petStore')
 const { initUpdater, checkHotUpdate } = require('./updater')
 
 const PET_CHAT_TONES = [
@@ -55,10 +56,27 @@ const DEFAULT_CONFIG = {
   }
 }
 
+function deepMerge(target, source) {
+  const result = { ...target }
+  for (const key in source) {
+    const sv = source[key]
+    const tv = target[key]
+    if (
+      sv && typeof sv === 'object' && !Array.isArray(sv) &&
+      tv && typeof tv === 'object' && !Array.isArray(tv)
+    ) {
+      result[key] = deepMerge(tv, sv)
+    } else {
+      result[key] = sv
+    }
+  }
+  return result
+}
+
 function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
-      return { ...DEFAULT_CONFIG, ...JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) }
+      return deepMerge(DEFAULT_CONFIG, JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')))
     }
   } catch (e) {
     console.error('Failed to load config:', e)
@@ -253,7 +271,6 @@ ipcMain.handle('show-notification', (_, payload) => {
   return true
 })
 ipcMain.handle('fetch-holidays', async (_, year) => {
-  const https = require('https')
   return new Promise((resolve) => {
     const timeout = setTimeout(() => resolve(null), 5000)
     https.get(`https://timor.tech/api/holiday/year/${year}`, (res) => {

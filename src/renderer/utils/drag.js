@@ -1,21 +1,36 @@
 let activeDrag = null
 let clickThroughState = true // current IPC state
 let hasFocus = false          // input/textarea is focused
+let pendingRaf = null
+let lastMouseX = 0
+let lastMouseY = 0
+
+let cachedWidgets = null
+let cachedSettingsPanel = null
+let cachedActivityPanel = null
+
+function getCachedElements() {
+  if (!cachedWidgets) {
+    cachedWidgets = Array.from(document.querySelectorAll('.widget'))
+    cachedSettingsPanel = document.getElementById('settings-panel')
+    cachedActivityPanel = document.getElementById('activity-panel')
+  }
+  return { cachedWidgets, cachedSettingsPanel, cachedActivityPanel }
+}
 
 function isOverWidget(x, y) {
-  const widgets = document.querySelectorAll('.widget:not(.hidden)')
-  const settingsPanel = document.getElementById('settings-panel')
-  const activityPanel = document.getElementById('activity-panel')
-  for (const w of widgets) {
+  const { cachedWidgets, cachedSettingsPanel, cachedActivityPanel } = getCachedElements()
+  for (const w of cachedWidgets) {
+    if (w.classList.contains('hidden')) continue
     const rect = w.getBoundingClientRect()
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true
   }
-  if (settingsPanel && !settingsPanel.classList.contains('hidden')) {
-    const rect = settingsPanel.getBoundingClientRect()
+  if (cachedSettingsPanel && !cachedSettingsPanel.classList.contains('hidden')) {
+    const rect = cachedSettingsPanel.getBoundingClientRect()
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true
   }
-  if (activityPanel && !activityPanel.classList.contains('hidden')) {
-    const rect = activityPanel.getBoundingClientRect()
+  if (cachedActivityPanel && !cachedActivityPanel.classList.contains('hidden')) {
+    const rect = cachedActivityPanel.getBoundingClientRect()
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true
   }
   return false
@@ -23,19 +38,27 @@ function isOverWidget(x, y) {
 
 function setClickThrough(ignore) {
   if (ignore === clickThroughState && !hasFocus) return
-  // Never enable click-through while an input is focused
   if (ignore && hasFocus) return
   clickThroughState = ignore
   window.alwaysHere.setClickThrough(ignore)
 }
 
+function scheduleClickThroughCheck() {
+  if (pendingRaf) return
+  pendingRaf = requestAnimationFrame(() => {
+    pendingRaf = null
+    setClickThrough(!isOverWidget(lastMouseX, lastMouseY))
+  })
+}
+
 export function initClickThrough() {
   document.addEventListener('mousemove', (e) => {
     if (activeDrag) return
-    setClickThrough(!isOverWidget(e.clientX, e.clientY))
+    lastMouseX = e.clientX
+    lastMouseY = e.clientY
+    scheduleClickThroughCheck()
   })
 
-  // Lock click-through OFF while any input is focused
   document.addEventListener('focusin', (e) => {
     if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
       hasFocus = true
@@ -61,6 +84,7 @@ export function makeDraggable(el, widgetKey, config, saveConfig) {
       lastX: e.clientX,
       hasMoved: false
     }
+    el.classList.add('is-dragging')
     el.style.cursor = 'grabbing'
   })
 }
@@ -93,6 +117,7 @@ document.addEventListener('mousemove', (e) => {
 
 document.addEventListener('mouseup', () => {
   if (!activeDrag) return
+  activeDrag.el.classList.remove('is-dragging')
   activeDrag.el.style.cursor = 'grab'
   if (activeDrag.hasMoved) activeDrag.saveConfig()
   activeDrag.el.dispatchEvent(new CustomEvent('widget-drag-end', {

@@ -233,5 +233,6 @@ module.exports = {
   findPetById,
   getPetSpritesheetDataUrl,
   importCodexPetPackage,
+  isInside,
   listPets
 }

@@ -30,7 +30,7 @@ export async function initConfig() {
   }
   if (!config.theme) config.theme = 'dark'
   if (!config.petId) config.petId = 'hina'
-  if (!config.petFolderPath) config.petFolderPath = 'C:\\Users\\61759\\.codex\\pets'
+  if (!config.petFolderPath) config.petFolderPath = ''
   config.reminders = mergeReminders(config.reminders)
   config.petChat = normalizePetChatSettings(config.petChat)
   config.wageman = mergeWagemanConfig(config.wageman)

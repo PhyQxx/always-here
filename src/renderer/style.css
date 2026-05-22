@@ -51,6 +51,10 @@ body.theme-sakura { --bg: rgba(60, 20, 40, 0.75); --bg-solid: rgba(60, 20, 40, 0
   transform: scale(1.02);
 }
 
+.widget.is-dragging:hover {
+  transform: none;
+}
+
 /* Toast and Confirm */
 .toast-container {
   position: fixed;

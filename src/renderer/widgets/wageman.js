@@ -5,6 +5,7 @@ import { mergeWagemanConfig } from './wagemanDefaults.mjs'
 let getConfigFn = null
 let saveConfigFn = null
 let updateInterval = null
+let domRefs = {}
 
 function countWorkdays(year, month) {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -43,13 +44,7 @@ function updateWageman() {
   const config = getConfigFn()
   const wc = config.wageman || {}
   const { clockIn, clockOut, monthlySalary, workDays } = wc
-  const countdownEl = document.getElementById('wageman-countdown')
-  const earnedEl = document.getElementById('wageman-earned')
-  const statusEl = document.getElementById('wageman-status')
-  const stopBtn = document.getElementById('wageman-stop')
-  const startBtn = document.getElementById('wageman-start')
-  const actualDurEl = document.getElementById('wageman-duration-actual')
-  const expectedDurEl = document.getElementById('wageman-duration-expected')
+  const { countdownEl, earnedEl, statusEl, stopBtn, startBtn, actualDurEl, expectedDurEl } = domRefs
 
   const now = new Date()
   const state = getWagemanState({
@@ -107,6 +102,16 @@ function updateWageman() {
 export async function initWageman(getConfig, saveConfig) {
   getConfigFn = getConfig
   saveConfigFn = saveConfig
+
+  domRefs = {
+    countdownEl: document.getElementById('wageman-countdown'),
+    earnedEl: document.getElementById('wageman-earned'),
+    statusEl: document.getElementById('wageman-status'),
+    stopBtn: document.getElementById('wageman-stop'),
+    startBtn: document.getElementById('wageman-start'),
+    actualDurEl: document.getElementById('wageman-duration-actual'),
+    expectedDurEl: document.getElementById('wageman-duration-expected')
+  }
 
   const config = getConfig()
   const now = new Date()
