@@ -16,7 +16,7 @@ async function init() {
 
   initClock()
   initPet(getConfig, saveConfig)
-  initTimer()
+  initTimer(getConfig, saveConfig)
   initNote(getConfig, saveConfig)
   initWageman(getConfig, saveConfig)
 

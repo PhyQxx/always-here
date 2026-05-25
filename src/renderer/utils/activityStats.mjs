@@ -111,6 +111,38 @@ export function summarizeRecentDays(log = [], days = 7, now = new Date()) {
   }
 }
 
+export function getWeeklySummary(log = [], config = {}, now = new Date()) {
+  const last7Days = []
+  const wc = config.wageman || {}
+  const dailyRate = (Number(wc.monthlySalary) || 0) / (Number(wc.workDays) || 22)
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i)
+    d.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(d)
+    dayEnd.setHours(23, 59, 59, 999)
+    
+    const dayEntries = log.filter(e => {
+      const dt = parseTime(e.createdAt)
+      return dt && dt >= d && dt <= dayEnd
+    })
+
+    const stats = summarizeActivityLog(dayEntries)
+    const workedThisDay = dayEntries.some(e => e.type === 'work-start' || e.type === 'work-stop')
+    
+    last7Days.push({
+      date: d,
+      label: d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }),
+      earned: workedThisDay ? dailyRate : 0,
+      overtimeMs: stats.totalOvertimeMs,
+      remindersDone: stats.reminders.water.done + stats.reminders.sedentary.done,
+      pomodoros: dayEntries.filter(e => e.type === 'pomodoro-done').length
+    })
+  }
+  return last7Days
+}
+
 function csvCell(value) {
   const text = String(value ?? '')
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text

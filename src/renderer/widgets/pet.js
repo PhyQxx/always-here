@@ -16,6 +16,10 @@ import {
   getReminderBubbleDuration
 } from './petReminderBubble.mjs'
 import {
+  calculateHappiness,
+  getMoodLevel
+} from './petHappiness.mjs'
+import {
   PET_CHAT_BUBBLE_DURATION_MS,
   getPetChatIntervalMs,
   normalizePetChatSettings,
@@ -44,6 +48,7 @@ let lastAmbientAction = null
 let lastDragAction = null
 let lastPetChatLine = null
 let pendingReminderEvent = null
+let isFocusing = false
 let reminderState = {
   lastHourlyKey: null,
   lastWaterAt: null,
@@ -95,7 +100,8 @@ function scheduleNextFrame() {
   const duration = getFrameDuration(currentAnimation, frameIndex)
   animTimer = setTimeout(() => {
     const animation = getAnimation(currentAnimation)
-    if (currentAnimation !== 'idle' && frameIndex >= animation.frames - 1) {
+    // If focusing, loop current animation. Otherwise revert to idle after non-idle animation finishes.
+    if (currentAnimation !== 'idle' && !isFocusing && frameIndex >= animation.frames - 1) {
       currentAnimation = 'idle'
       frameIndex = 0
     } else {
@@ -140,7 +146,12 @@ function finishPendingReminder(result) {
     return
   }
   const config = getConfigFn()
-  appendActivityLog(config, createReminderResponseEvent(pendingReminderEvent, result))
+  const event = createReminderResponseEvent(pendingReminderEvent, result)
+  appendActivityLog(config, event)
+  
+  // Update happiness
+  config.happiness = calculateHappiness(config.happiness, event)
+  
   saveConfigFn()
   hideBubble()
 }
@@ -148,7 +159,15 @@ function finishPendingReminder(result) {
 function showBubble(text, options = {}) {
   const bubble = document.getElementById('pet-bubble')
   const bubbleText = document.getElementById('pet-bubble-text')
+  const moodIndicator = document.getElementById('pet-mood-indicator')
   if (!bubble || !bubbleText) return
+  
+  if (moodIndicator) {
+    const config = getConfigFn()
+    const mood = getMoodLevel(config.happiness)
+    moodIndicator.textContent = mood === 'happy' ? '😊' : mood === 'grumpy' ? '💢' : '😐'
+  }
+
   bubbleText.textContent = text
   bubble.classList.remove('hidden')
   setBubbleActionsVisible(Boolean(options.confirmable))
@@ -220,7 +239,11 @@ function showPetChat(options = {}) {
       wageman: config.wageman // Pass wageman config for specific lines
     }
   })
-  lastPetChatLine = pickPetChatLine({ previousLine: lastPetChatLine, lines })
+  lastPetChatLine = pickPetChatLine({
+    previousLine: lastPetChatLine,
+    lines,
+    happiness: config.happiness
+  })
   showBubble(lastPetChatLine, { duration: PET_CHAT_BUBBLE_DURATION_MS })
   if (currentAnimation === 'idle') playAction('waving')
 }
@@ -239,7 +262,7 @@ function startPetChatLoop() {
 function scheduleAmbientAction(delay = randomActionDelay()) {
   if (actionTimer) clearTimeout(actionTimer)
   actionTimer = setTimeout(() => {
-    if (currentAnimation === 'idle') {
+    if (currentAnimation === 'idle' && !isFocusing) {
       lastAmbientAction = pickAmbientAction(lastAmbientAction)
       playAction(lastAmbientAction)
     }
@@ -320,6 +343,28 @@ export async function initPet(getConfig, saveConfig) {
 
   window.addEventListener('pet-action', (event) => {
     if (typeof event.detail === 'string') playAction(event.detail)
+  })
+
+  window.addEventListener('pomodoro-start', () => {
+    isFocusing = true
+    playAction('review')
+  })
+
+  window.addEventListener('pomodoro-stop', () => {
+    isFocusing = false
+  })
+
+  window.addEventListener('pomodoro-done', (event) => {
+    const config = getConfigFn()
+    config.happiness = calculateHappiness(config.happiness, { type: 'pomodoro-done' })
+    saveConfigFn()
+  })
+
+  window.addEventListener('work-stop', (event) => {
+    // work-stop event detail contains the activity entry
+    const config = getConfigFn()
+    config.happiness = calculateHappiness(config.happiness, event.detail)
+    saveConfigFn()
   })
 
   const widget = document.getElementById('widget-pet')

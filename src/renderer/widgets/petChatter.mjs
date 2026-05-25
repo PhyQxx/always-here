@@ -1,5 +1,8 @@
 export const PET_CHAT_INTERVAL_MS = 60 * 1000
-export const PET_CHAT_BUBBLE_DURATION_MS = 7000
+import { getMoodLevel, MOOD_LEVELS } from './petHappiness.mjs'
+
+export const PET_CHAT_BUBBLE_DURATION_MS = 5000
+
 export const MIN_PET_CHAT_INTERVAL_MINUTES = 1
 export const MAX_PET_CHAT_INTERVAL_MINUTES = 60
 
@@ -182,11 +185,25 @@ export function pickPetChatLine({
   now = new Date(),
   previousLine = null,
   lines = getPetChatLines(now),
+  happiness = 70,
   random = Math.random
 } = {}) {
-  const choices = lines.length > 1
-    ? lines.filter(line => line !== previousLine)
-    : lines
+  let filtered = lines
+  const mood = getMoodLevel(happiness)
+
+  if (mood === MOOD_LEVELS.GRUMPY) {
+    // Favor snarky/shorter/questioning lines
+    const snarky = lines.filter(l => l.includes('...') || l.includes('？') || l.includes('别') || l.includes('快'))
+    if (snarky.length > 0 && random() > 0.3) filtered = snarky
+  } else if (mood === MOOD_LEVELS.HAPPY) {
+    // Favor encouraging/warmer lines
+    const warm = lines.filter(l => !l.includes('...') && (l.includes('❤') || l.includes('♪') || l.includes('棒') || l.includes('好')))
+    if (warm.length > 0 && random() > 0.3) filtered = warm
+  }
+
+  const choices = filtered.length > 1
+    ? filtered.filter(line => line !== previousLine)
+    : filtered
   const index = Math.floor(random() * choices.length)
   return choices[Math.min(index, choices.length - 1)]
 }

@@ -6,7 +6,7 @@ let config = null
 const DEFAULT_WIDGETS = {
   clock: { enabled: true, x: 50, y: 50 },
   pet: { enabled: true, x: 300, y: 400 },
-  timer: { enabled: true, x: 50, y: 200 },
+  timer: { enabled: true, x: 50, y: 200, mode: 'pomodoro', workTime: 25, breakTime: 5 },
   note: { enabled: true, x: 600, y: 50 },
   wageman: { enabled: true, x: 600, y: 350 }
 }
@@ -26,7 +26,7 @@ export async function initConfig() {
   migrateConfig(config)
 
   for (const key in DEFAULT_WIDGETS) {
-    if (!config.widgets[key]) config.widgets[key] = { ...DEFAULT_WIDGETS[key] }
+    config.widgets[key] = { ...DEFAULT_WIDGETS[key], ...(config.widgets[key] || {}) }
   }
   if (!config.theme) config.theme = 'dark'
   if (!config.petId) config.petId = 'hina'

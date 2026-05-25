@@ -35,6 +35,14 @@
   pointer-events: auto;
 }
 
+.pet-mood-indicator {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
 .pet-bubble::after {
   content: '';
   position: absolute;

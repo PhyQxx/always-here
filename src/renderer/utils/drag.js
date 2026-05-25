@@ -24,6 +24,15 @@ function isOverWidget(x, y) {
     if (w.classList.contains('hidden')) continue
     const rect = w.getBoundingClientRect()
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true
+
+    // Special case for pet bubble which can overflow the widget container
+    if (w.id === 'widget-pet') {
+      const bubble = document.getElementById('pet-bubble')
+      if (bubble && !bubble.classList.contains('hidden')) {
+        const bRect = bubble.getBoundingClientRect()
+        if (x >= bRect.left && x <= bRect.right && y >= bRect.top && y <= bRect.bottom) return true
+      }
+    }
   }
   if (cachedSettingsPanel && !cachedSettingsPanel.classList.contains('hidden')) {
     const rect = cachedSettingsPanel.getBoundingClientRect()

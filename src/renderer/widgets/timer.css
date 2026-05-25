@@ -4,6 +4,33 @@
   cursor: grab;
 }
 
+.timer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.timer-mode-indicator {
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.timer-mode-indicator:hover {
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1;
+}
+
+.timer-phase-indicator {
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .timer-display {
   font-size: 32px;
   font-weight: 300;

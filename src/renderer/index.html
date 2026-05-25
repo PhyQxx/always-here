@@ -24,6 +24,7 @@
       <canvas id="pet-canvas" width="130" height="150"></canvas>
     </div>
     <div class="pet-bubble hidden" id="pet-bubble">
+      <div class="pet-mood-indicator" id="pet-mood-indicator"></div>
       <span id="pet-bubble-text"></span>
       <div class="pet-bubble-actions hidden" id="pet-bubble-actions">
         <button type="button" data-result="done">做了</button>
@@ -33,10 +34,14 @@
   </div>
 
   <div id="widget-timer" class="widget" data-widget="timer">
+    <div class="timer-header">
+      <span class="timer-mode-indicator" id="timer-mode-indicator">秒表</span>
+      <span class="timer-phase-indicator hidden" id="timer-phase-indicator">专注中</span>
+    </div>
     <div class="timer-display" id="timer-display">00:00.00</div>
     <div class="timer-buttons">
       <button class="timer-btn" id="timer-start">开始</button>
-      <button class="timer-btn" id="timer-lap">计次</button>
+      <button class="timer-btn" id="timer-action">计次</button>
       <button class="timer-btn" id="timer-reset">重置</button>
     </div>
     <div class="timer-laps" id="timer-laps"></div>
@@ -44,9 +49,12 @@
 
   <div id="widget-note" class="widget" data-widget="note">
     <div class="note-header">
-      <span class="note-title">便签</span>
+      <span class="note-title">便签 / 待办</span>
     </div>
-    <textarea class="note-content" id="note-content" placeholder="在这里写点什么..."></textarea>
+    <div class="note-body">
+      <div id="note-viewer" class="note-content"></div>
+      <textarea id="note-editor" class="hidden" placeholder="输入内容... 支持 - [ ] 待办格式"></textarea>
+    </div>
   </div>
 
   <div id="widget-wageman" class="widget" data-widget="wageman">
@@ -207,9 +215,23 @@
 
       <!-- Timer Tab -->
       <div class="settings-tab-content" data-tab-content="timer">
-        <div class="settings-section-title" data-settings-scope="timer">秒表设置</div>
-        <div class="setting-row empty-state" data-settings-scope="timer">暂无特定设置</div>
+        <div class="settings-section-title" data-settings-scope="timer">番茄钟设置</div>
+        <div class="setting-row" data-settings-scope="timer">
+          <div class="setting-label">专注时长</div>
+          <div class="setting-controls">
+            <input type="number" id="setting-timer-worktime" min="1" step="1" class="input-sm">
+            <span class="unit">分钟</span>
+          </div>
+        </div>
+        <div class="setting-row" data-settings-scope="timer">
+          <div class="setting-label">休息时长</div>
+          <div class="setting-controls">
+            <input type="number" id="setting-timer-breaktime" min="1" step="1" class="input-sm">
+            <span class="unit">分钟</span>
+          </div>
+        </div>
       </div>
+
 
       <!-- Note Tab -->
       <div class="settings-tab-content" data-tab-content="note">

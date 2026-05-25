@@ -1,5 +1,5 @@
 #widget-note {
-  width: 220px;
+  width: 240px;
   cursor: grab;
   padding: 10px 14px;
 }
@@ -12,29 +12,84 @@
 }
 
 .note-title {
-  font-size: 12px;
-  opacity: 0.6;
+  font-size: 11px;
+  opacity: 0.5;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.note-content {
+.note-body {
   width: 100%;
-  height: 100px;
+  min-height: 100px;
+  max-height: 240px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.note-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.note-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+#note-viewer {
+  width: 100%;
+  min-height: 100px;
+  padding: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  cursor: text;
+}
+
+#note-editor {
+  width: 100%;
+  min-height: 100px;
+  background: transparent;
+  border: none;
   color: var(--text);
   padding: 8px;
   font-size: 13px;
   font-family: inherit;
+  line-height: 1.5;
   resize: none;
   outline: none;
-  cursor: text;
+  display: block;
 }
 
-.note-content::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+/* Task List Styles */
+.task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
-.note-content:focus {
-  border-color: var(--accent);
+.task-checkbox {
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.task-text {
+  flex: 1;
+}
+
+.task-item.completed .task-text {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.hidden {
+  display: none !important;
 }

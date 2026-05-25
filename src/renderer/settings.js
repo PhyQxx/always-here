@@ -5,7 +5,8 @@ import {
   formatActivityEntry,
   formatDuration,
   summarizeRecentDays,
-  summarizeActivityLog
+  summarizeActivityLog,
+  getWeeklySummary
 } from './utils/activityStats.mjs'
 import {
   getSettingsModeSummary,
@@ -412,7 +413,9 @@ export function initSettings(getConfig, saveConfig) {
     const rangeEl = document.getElementById('activity-range')
     const exportBtn = document.getElementById('activity-log-export')
     const clearBtn = document.getElementById('activity-log-clear')
-    if (!openBtn || !closeBtn || !actPanel || !filterEl || !rangeEl || !exportBtn || !clearBtn) return
+
+    // Essential elements for the panel to function
+    if (!actPanel || !closeBtn || !filterEl || !rangeEl || !exportBtn || !clearBtn) return
 
     function getFilters() {
       return {
@@ -427,10 +430,12 @@ export function initSettings(getConfig, saveConfig) {
       window.alwaysHere.setClickThrough(false)
     }
 
-    openBtn.addEventListener('click', openActivityPanel)
-    openBtnWageman?.addEventListener('click', openActivityPanel)
+    if (openBtn) openBtn.addEventListener('click', openActivityPanel)
+    if (openBtnWageman) openBtnWageman.addEventListener('click', openActivityPanel)
+    
     filterEl.addEventListener('change', openActivityPanel)
     rangeEl.addEventListener('change', openActivityPanel)
+    
     exportBtn.addEventListener('click', async () => {
       const entries = filterActivityLog(getConfig().activityLog || [], getFilters())
       await window.alwaysHere.exportActivityLog?.(exportActivityLogCsv(entries))
@@ -490,6 +495,31 @@ export function initSettings(getConfig, saveConfig) {
       workDaysInput.value = e.detail.workDays
       if (workDaysLabel) workDaysLabel.textContent = e.detail.label
     })
+  }
+
+  function initTimerSettings() {
+    const workTimeInput = document.getElementById('setting-timer-worktime')
+    const breakTimeInput = document.getElementById('setting-timer-breaktime')
+    if (!workTimeInput || !breakTimeInput) return
+
+    const config = getConfig()
+    const timerSettings = config.widgets.timer
+
+    workTimeInput.value = timerSettings.workTime || 25
+    breakTimeInput.value = timerSettings.breakTime || 5
+
+    const saveTimerSettings = async () => {
+      timerSettings.workTime = Math.max(1, Number(workTimeInput.value) || 25)
+      timerSettings.breakTime = Math.max(1, Number(breakTimeInput.value) || 5)
+      workTimeInput.value = timerSettings.workTime
+      breakTimeInput.value = timerSettings.breakTime
+      await saveConfig()
+      // Optional: notify timer widget if needed, 
+      // but usually it's fine as it reads from config on next reset/start
+    }
+
+    workTimeInput.addEventListener('change', saveTimerSettings)
+    breakTimeInput.addEventListener('change', saveTimerSettings)
   }
 
   // --- Start of initSettings execution ---
@@ -592,6 +622,7 @@ export function initSettings(getConfig, saveConfig) {
   initPetFolder()
   initPetPackageImport()
   initReminderSettings()
+  initTimerSettings()
   const petChatSettings = initPetChatSettings()
   const activityPanel = initActivityPanel()
   initWagemanSettings()
@@ -608,85 +639,123 @@ export function initSettings(getConfig, saveConfig) {
       activityPanel?.open()
     }
   })
-}
 
-function renderActivityPanel(log, filters = {}) {
-  const filteredLog = filterActivityLog(log, filters)
-  const summaryEl = document.getElementById('activity-summary')
-  const recentEl = document.getElementById('activity-recent')
-  const chartEl = document.getElementById('activity-chart')
-  const analysisEl = document.getElementById('activity-analysis')
-  const listEl = document.getElementById('activity-list')
-  const stats = summarizeActivityLog(filteredLog)
-  const recent = summarizeRecentDays(log, 7)
-
-  recentEl.textContent = `最近 7 天：${recent.entries} 条记录，喝水完成 ${recent.waterDone} 次、漏掉 ${recent.waterMissed} 次，久坐完成 ${recent.sedentaryDone} 次、漏掉 ${recent.sedentaryMissed} 次，加班 ${formatDuration(recent.totalOvertimeMs)}。`
-
-  summaryEl.replaceChildren(
-    createSummaryItem('总记录', stats.total),
-    createSummaryItem('喝水完成', stats.reminders.water.done),
-    createSummaryItem('久坐完成', stats.reminders.sedentary.done),
-    createSummaryItem('累计加班', formatDuration(stats.totalOvertimeMs))
-  )
-
-  chartEl.replaceChildren(
-    createReminderBars('喝水', stats.reminders.water),
-    createReminderBars('久坐', stats.reminders.sedentary)
-  )
-
-  analysisEl.textContent = buildActivityAnalysis(filteredLog)
-
-  listEl.replaceChildren()
-  const entries = [...filteredLog].reverse().slice(0, 80)
-  if (!entries.length) {
-    const empty = document.createElement('div')
-    empty.className = 'activity-empty'
-    empty.textContent = '暂无记录'
-    listEl.appendChild(empty)
-    return
+  function createWeeklyChart(data) {
+    const maxEarned = Math.max(...data.map(d => d.earned), 1)
+    return data.map(d => {
+      const height = Math.round((d.earned / maxEarned) * 100)
+      return `
+        <div class="chart-column">
+          <div class="chart-bar-wrapper">
+            <div class="chart-bar" style="height: ${height}%"></div>
+          </div>
+          <div class="chart-label">${d.label}</div>
+        </div>
+      `
+    }).join('')
   }
-  for (const entry of entries) {
+
+  function renderActivityPanel(log, filters = {}) {
+    const filteredLog = filterActivityLog(log, filters)
+    const config = getConfig()
+    const summaryEl = document.getElementById('activity-summary')
+    const recentEl = document.getElementById('activity-recent')
+    const chartEl = document.getElementById('activity-chart')
+    const analysisEl = document.getElementById('activity-analysis')
+    const listEl = document.getElementById('activity-list')
+    if (!summaryEl || !recentEl || !chartEl || !analysisEl || !listEl) return
+
+    const stats = summarizeActivityLog(filteredLog)
+    const recent = summarizeRecentDays(log, 7)
+    const weeklyData = getWeeklySummary(log, config)
+
+    recentEl.innerHTML = `
+      <div class="activity-report">
+        <div class="report-section">
+          <div class="report-label">近 7 日薪资增长趋势</div>
+          <div class="weekly-chart">${createWeeklyChart(weeklyData)}</div>
+        </div>
+        <div class="report-section-grid">
+          <div class="report-stat">
+            <span class="stat-label">身心平衡度</span>
+            <strong class="stat-value">${config.happiness || 0}%</strong>
+            <span class="stat-hint">${(config.happiness || 0) > 70 ? '平衡极佳' : (config.happiness || 0) > 40 ? '正常维持' : '急需休息'}</span>
+          </div>
+          <div class="report-stat">
+            <span class="stat-label">本周专注时长</span>
+            <strong class="stat-value">${weeklyData.reduce((acc, d) => acc + d.pomodoros, 0)}</strong>
+            <span class="stat-hint">个番茄钟</span>
+          </div>
+        </div>
+      </div>
+    `
+
+    summaryEl.replaceChildren(
+      createSummaryItem('总记录', stats.total),
+      createSummaryItem('喝水完成', stats.reminders.water.done),
+      createSummaryItem('久坐完成', stats.reminders.sedentary.done),
+      createSummaryItem('累计加班', formatDuration(stats.totalOvertimeMs))
+    )
+
+    chartEl.replaceChildren(
+      createReminderBars('喝水', stats.reminders.water),
+      createReminderBars('久坐', stats.reminders.sedentary)
+    )
+
+    analysisEl.textContent = buildActivityAnalysis(filteredLog)
+
+    listEl.replaceChildren()
+    const entries = [...filteredLog].reverse().slice(0, 80)
+    if (!entries.length) {
+      const empty = document.createElement('div')
+      empty.className = 'activity-empty'
+      empty.textContent = '暂无记录'
+      listEl.appendChild(empty)
+      return
+    }
+    for (const entry of entries) {
+      const item = document.createElement('div')
+      item.className = 'activity-entry'
+      item.textContent = formatActivityEntry(entry)
+      listEl.appendChild(item)
+    }
+  }
+
+  function createSummaryItem(label, value) {
     const item = document.createElement('div')
-    item.className = 'activity-entry'
-    item.textContent = formatActivityEntry(entry)
-    listEl.appendChild(item)
+    item.className = 'activity-summary-item'
+    const valueEl = document.createElement('strong')
+    valueEl.textContent = String(value)
+    const labelEl = document.createElement('span')
+    labelEl.textContent = label
+    item.append(valueEl, labelEl)
+    return item
   }
-}
 
-function createSummaryItem(label, value) {
-  const item = document.createElement('div')
-  item.className = 'activity-summary-item'
-  const valueEl = document.createElement('strong')
-  valueEl.textContent = String(value)
-  const labelEl = document.createElement('span')
-  labelEl.textContent = label
-  item.append(valueEl, labelEl)
-  return item
-}
+  function createReminderBars(label, stats) {
+    const row = document.createElement('div')
+    row.className = 'activity-bar-row'
+    const title = document.createElement('span')
+    title.textContent = label
+    const track = document.createElement('div')
+    track.className = 'activity-bar-track'
+    const total = Math.max(1, stats.total)
+    const done = createBarSegment('done', stats.done / total)
+    const skipped = createBarSegment('skipped', stats.skipped / total)
+    const timeout = createBarSegment('timeout', stats.timeout / total)
+    track.append(done, skipped, timeout)
+    const count = document.createElement('span')
+    count.textContent = `${stats.done}/${stats.total}`
+    row.append(title, track, count)
+    return row
+  }
 
-function createReminderBars(label, stats) {
-  const row = document.createElement('div')
-  row.className = 'activity-bar-row'
-  const title = document.createElement('span')
-  title.textContent = label
-  const track = document.createElement('div')
-  track.className = 'activity-bar-track'
-  const total = Math.max(1, stats.total)
-  const done = createBarSegment('done', stats.done / total)
-  const skipped = createBarSegment('skipped', stats.skipped / total)
-  const timeout = createBarSegment('timeout', stats.timeout / total)
-  track.append(done, skipped, timeout)
-  const count = document.createElement('span')
-  count.textContent = `${stats.done}/${stats.total}`
-  row.append(title, track, count)
-  return row
-}
-
-function createBarSegment(type, ratio) {
-  const segment = document.createElement('div')
-  segment.className = `activity-bar-segment ${type}`
-  segment.style.width = `${Math.round(ratio * 100)}%`
-  return segment
+  function createBarSegment(type, ratio) {
+    const segment = document.createElement('div')
+    segment.className = `activity-bar-segment ${type}`
+    segment.style.width = `${Math.round(ratio * 100)}%`
+    return segment
+  }
 }
 
 function ensureReminderConfig(config) {

@@ -171,7 +171,7 @@ export async function initWageman(getConfig, saveConfig) {
       offWorkStops: wc.offWorkStops || {}
     })
     wc.offWorkStops[today] = now.toISOString()
-    appendActivityLog(config, {
+    const entry = {
       type: 'work-stop',
       result: 'done',
       dayKey: today,
@@ -180,9 +180,12 @@ export async function initWageman(getConfig, saveConfig) {
       stoppedAt: wc.offWorkStops[today],
       overtimeMs: state.overtimeMs || 0,
       createdAt: wc.offWorkStops[today]
-    })
+    }
+    appendActivityLog(config, entry)
     await saveConfig()
     updateWageman()
+    
+    window.dispatchEvent(new CustomEvent('work-stop', { detail: entry }))
   })
 
   ;[stopBtn, startBtn].forEach(el => {
