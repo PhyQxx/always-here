@@ -101,6 +101,7 @@
       <div class="settings-tab" data-tab="timer">秒表</div>
       <div class="settings-tab" data-tab="note">便签</div>
       <div class="settings-tab" data-tab="wageman">打工</div>
+      <div class="settings-tab" data-tab="voice">语音</div>
       <div class="settings-tab" data-tab="system">系统</div>
     </div>
     <div class="settings-body">
@@ -270,6 +271,65 @@
         </div>
         <div class="setting-row" data-settings-scope="wageman">
           <button type="button" id="activity-log-open-wageman" class="btn-block">查看打工记录</button>
+        </div>
+      </div>
+
+      <!-- Voice Tab -->
+      <div class="settings-tab-content" data-tab-content="voice">
+        <div class="settings-section-title" data-settings-scope="global">语音对话(小智)</div>
+        <div class="settings-grid">
+          <div class="setting-row" data-settings-scope="global">
+            <label><input type="checkbox" id="voice-enabled"> 启用语音对话</label>
+          </div>
+          <div class="setting-row" data-settings-scope="global">
+            <label><input type="checkbox" id="voice-autoplay" checked> 自动播放回复语音</label>
+          </div>
+        </div>
+        <div class="setting-row" data-settings-scope="global">
+          <div class="setting-label">服务端地址</div>
+          <div class="setting-controls">
+            <input type="text" id="voice-server-url" class="input-sm" style="width: 240px" placeholder="ws://127.0.0.1:8000/xiaozhi/v1/">
+          </div>
+        </div>
+        <div class="setting-row" data-settings-scope="global">
+          <div class="setting-label">Token(可选)</div>
+          <div class="setting-controls">
+            <input type="text" id="voice-token" class="input-sm" style="width: 240px" placeholder="自建服务端默认无需">
+          </div>
+        </div>
+        <div class="setting-row" data-settings-scope="global">
+          <div class="setting-label">唤醒快捷键</div>
+          <div class="setting-controls">
+            <input type="text" id="voice-trigger-key" class="input-sm" style="width: 200px" placeholder="CommandOrControl+Shift+Space">
+            <span class="status-text" id="voice-trigger-key-hint"></span>
+          </div>
+        </div>
+        <div class="setting-row" data-settings-scope="global">
+          <div class="setting-label">设备 ID</div>
+          <div class="setting-controls">
+            <span class="value-label" id="voice-device-id">(未生成)</span>
+          </div>
+        </div>
+        <div class="setting-row" data-settings-scope="global">
+          <button type="button" id="voice-test-connect" class="btn-primary">测试连接</button>
+          <span class="status-text" id="voice-test-status"></span>
+        </div>
+
+        <div class="settings-section-title" data-settings-scope="global">看屏幕说话</div>
+        <div class="setting-row" data-settings-scope="global" style="flex-direction:column;align-items:flex-start;gap:4px;">
+          <label><input type="checkbox" id="vision-enabled"> 启用看屏幕说话</label>
+          <span class="status-text" style="font-size:12px;opacity:0.7;">⚠️ 截屏会发送到智谱服务器分析,注意隐私</span>
+        </div>
+        <div class="setting-row" data-settings-scope="global">
+          <div class="setting-label">定时看屏幕(分钟)</div>
+          <div class="setting-controls">
+            <input type="number" id="vision-interval" min="0" step="1" class="input-sm" style="width:60px">
+            <span class="unit">0=关闭</span>
+          </div>
+        </div>
+        <div class="setting-row" data-settings-scope="global">
+          <button type="button" id="vision-look-now" class="btn-primary">看一眼屏幕</button>
+          <span class="status-text" id="vision-status"></span>
         </div>
       </div>
 

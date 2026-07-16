@@ -21,6 +21,7 @@ import {
 } from './petHappiness.mjs'
 import {
   PET_CHAT_BUBBLE_DURATION_MS,
+  PET_CHAT_TONES,
   getPetChatIntervalMs,
   normalizePetChatSettings,
   getPetChatLines,
@@ -215,7 +216,29 @@ function startReminderLoop() {
   reminderTimer = setInterval(checkReminders, 1000)
 }
 
-function showPetChat(options = {}) {
+// 从写死台词池里挑一句(作为 AI 不可用时的回落)
+function pickLocalChatLine(tone) {
+  const config = getConfigFn()
+  const recent = summarizeRecentDays(config.activityLog || [], 7)
+  const lines = getPetChatLines(new Date(), {
+    tone: tone,
+    activityContext: {
+      missedWaterCount: recent.waterMissed,
+      missedSedentaryCount: recent.sedentaryMissed,
+      overtimeMinutes: Math.floor(recent.totalOvertimeMs / 60000),
+      wageman: config.wageman
+    }
+  })
+  lastPetChatLine = pickPetChatLine({
+    previousLine: lastPetChatLine,
+    lines,
+    happiness: config.happiness
+  })
+  return lastPetChatLine
+}
+
+// 优先走小智 AI 生成台词;未连接/失败时回落到写死台词
+async function showPetChat(options = {}) {
   const config = getConfigFn()
   const chatSettings = normalizePetChatSettings(config.petChat)
   const bubble = document.getElementById('pet-bubble')
@@ -227,31 +250,61 @@ function showPetChat(options = {}) {
     bubbleVisible,
     force: Boolean(options.force)
   })) return
-  
+
   const tone = options.tone || chatSettings.tone
-  const recent = summarizeRecentDays(config.activityLog || [], 7)
-  const lines = getPetChatLines(new Date(), {
-    tone: tone,
-    activityContext: {
-      missedWaterCount: recent.waterMissed,
-      missedSedentaryCount: recent.sedentaryMissed,
-      overtimeMinutes: Math.floor(recent.totalOvertimeMs / 60000),
-      wageman: config.wageman // Pass wageman config for specific lines
-    }
-  })
-  lastPetChatLine = pickPetChatLine({
-    previousLine: lastPetChatLine,
-    lines,
-    happiness: config.happiness
-  })
-  showBubble(lastPetChatLine, { duration: PET_CHAT_BUBBLE_DURATION_MS })
+
+  // 语音已启用时,尝试走小智 AI
+  if (config.voice?.enabled) {
+    const aiOk = await tryAiChat(options.aiPrompt)
+    if (aiOk) return
+    // AI 不可用 → 回落本地台词(继续往下)
+  }
+
+  // 回落:写死台词
+  showBubble(pickLocalChatLine(tone), { duration: PET_CHAT_BUBBLE_DURATION_MS })
   if (currentAnimation === 'idle') playAction('waving')
+}
+
+// 调小智 AI 说一句;成功返回 true(气泡/动画由 voice 事件驱动)
+// prompt 可选,用于引导 AI 生成"主动陪伴/单击"类台词;不传则让小智自由发挥
+async function tryAiChat(prompt) {
+  try {
+    const status = await window.alwaysHere.voiceStatus()
+    let connected = status.connected
+    if (!connected) {
+      // 尝试自动连接(只在已启用时)
+      await window.alwaysHere.voiceConnect()
+      for (let i = 0; i < 20; i++) {
+        const s = await window.alwaysHere.voiceStatus()
+        if (s.connected) { connected = true; break }
+        await new Promise((r) => setTimeout(r, 100))
+      }
+    }
+    if (!connected) return false
+    // 等待 AI 回复期间给个思考提示 + 动画
+    showBubble('🤔 想想说什么...', { duration: 5000 })
+    if (currentAnimation === 'idle') playAction('review')
+    const text = prompt || '主动跟我说一句话,像桌面陪伴伙伴那样。'
+    const res = await window.alwaysHere.voiceSendText(text)
+    return Boolean(res?.ok)
+  } catch {
+    return false
+  }
 }
 
 function startPetChatLoop() {
   if (chatTimer) clearInterval(chatTimer)
-  const chatSettings = normalizePetChatSettings(getConfigFn().petChat)
-  getConfigFn().petChat = chatSettings
+  const config = getConfigFn()
+  const chatSettings = normalizePetChatSettings(config.petChat)
+  config.petChat = chatSettings
+
+  // 视觉(看屏幕)已启用时,定时聊天交给 AI 自主决定(vision-start-loop),
+  // 不再跑这个"无脑定时蹦台词"的循环,避免频繁打扰
+  if (config.vision?.enabled) {
+    chatTimer = null
+    return
+  }
+  // 视觉未启用时:保留本地写死台词兜底(离线陪伴)
   if (!chatSettings.enabled || chatSettings.quietMode) {
     chatTimer = null
     return
@@ -329,16 +382,28 @@ export async function initPet(getConfig, saveConfig) {
     const payload = event.detail
     const command = typeof payload === 'string' ? payload : payload.type
     if (command === 'pet-say-now') {
-      showPetChat({ force: true, tone: payload.tone })
+      const toneLabel = PET_CHAT_TONES.find(t => t.id === payload.tone)?.label || '陪伴'
+      showPetChat({
+        force: true,
+        tone: payload.tone,
+        aiPrompt: `用${toneLabel}的语气,主动跟我说一句简短的话(15字以内)。`
+      })
     }
     if (command === 'toggle-pet-quiet-mode') {
       // handled by tray logic usually, but ensure we update if needed
-      startPetChatLoop() 
+      startPetChatLoop()
     }
   })
 
   window.addEventListener('pet-reminder', (event) => {
     if (event.detail?.text) handleReminderEvent(event.detail)
+  })
+
+  // 小智对话回复气泡:复用同一气泡,语音回复停留更久(说话中)
+  window.addEventListener('pet-voice-reply', (event) => {
+    if (!event.detail?.text) return
+    const duration = getConfigFn().voice?.bubbleDurationMs || 8000
+    showBubble(event.detail.text, { duration })
   })
 
   window.addEventListener('pet-action', (event) => {
@@ -383,7 +448,13 @@ export async function initPet(getConfig, saveConfig) {
   })
 
   widget.addEventListener('click', () => {
-    showPetChat({ force: true })
+    // 若语音输入栏被隐藏(如刚按过 Esc),单击先把它唤回来,不挥手
+    const voiceBar = document.getElementById('pet-voice-bar')
+    if (voiceBar?.classList.contains('hidden')) {
+      window.dispatchEvent(new CustomEvent('pet-voice-show-bar'))
+      return
+    }
+    // 单击只做挥手回应,不触发对话(避免频繁打扰/联网)
     if (currentAnimation === 'idle') playAction('waving')
   })
 

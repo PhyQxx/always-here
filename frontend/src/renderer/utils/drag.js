@@ -25,12 +25,15 @@ function isOverWidget(x, y) {
     const rect = w.getBoundingClientRect()
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true
 
-    // Special case for pet bubble which can overflow the widget container
+    // Special case for pet bubble / voice bar which can overflow the widget container
     if (w.id === 'widget-pet') {
-      const bubble = document.getElementById('pet-bubble')
-      if (bubble && !bubble.classList.contains('hidden')) {
-        const bRect = bubble.getBoundingClientRect()
-        if (x >= bRect.left && x <= bRect.right && y >= bRect.top && y <= bRect.bottom) return true
+      const overflowIds = ['pet-bubble', 'pet-voice-bar']
+      for (const id of overflowIds) {
+        const el = document.getElementById(id)
+        if (el && !el.classList.contains('hidden')) {
+          const r = el.getBoundingClientRect()
+          if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true
+        }
       }
     }
   }

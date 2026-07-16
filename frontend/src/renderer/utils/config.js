@@ -1,5 +1,7 @@
 import { mergeWagemanConfig } from '../widgets/wagemanDefaults.mjs'
 import { normalizePetChatSettings } from '../widgets/petChatter.mjs'
+import { normalizeVoiceSettings } from '../widgets/voiceSettings.mjs'
+import { normalizeVisionSettings } from '../widgets/voiceSettings.mjs'
 
 let config = null
 
@@ -33,6 +35,8 @@ export async function initConfig() {
   if (!config.petFolderPath) config.petFolderPath = ''
   config.reminders = mergeReminders(config.reminders)
   config.petChat = normalizePetChatSettings(config.petChat)
+  config.voice = normalizeVoiceSettings(config.voice)
+  config.vision = normalizeVisionSettings(config.vision)
   config.wageman = mergeWagemanConfig(config.wageman)
   if (config.happiness === undefined) config.happiness = 70
   if (!config.noteText) config.noteText = ''

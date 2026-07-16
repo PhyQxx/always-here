@@ -2,6 +2,7 @@ import { initConfig, getConfig, saveConfig, applyAll } from './utils/config.js'
 import { initClickThrough, makeDraggable } from './utils/drag.js'
 import { initClock } from './widgets/clock.js'
 import { initPet } from './widgets/pet.js'
+import { initPetVoice } from './widgets/petVoice.mjs'
 import { initTimer } from './widgets/timer.js'
 import { initNote } from './widgets/note.js'
 import { initWageman } from './widgets/wageman.js'
@@ -16,6 +17,7 @@ async function init() {
 
   initClock()
   initPet(getConfig, saveConfig)
+  initPetVoice(getConfig, saveConfig)
   initTimer(getConfig, saveConfig)
   initNote(getConfig, saveConfig)
   initWageman(getConfig, saveConfig)

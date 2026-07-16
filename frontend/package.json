@@ -47,10 +47,13 @@
     "mac": {
       "icon": "build/icon.png",
       "target": [
-        "dmg",
-        "zip"
+        "dir"
       ],
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Always Here 需要麦克风权限以支持与小智语音对话。",
+        "NSScreenCaptureUsageDescription": "Always Here 需要屏幕录制权限以让桌面宠物看到屏幕内容并主动陪伴。"
+      }
     },
     "dmg": {
       "contents": [
@@ -75,6 +78,8 @@
   },
   "dependencies": {
     "electron-log": "^5.4.4",
-    "electron-updater": "^6.8.3"
+    "electron-updater": "^6.8.3",
+    "opus-decoder": "^0.7.11",
+    "ws": "^8.21.1"
   }
 }

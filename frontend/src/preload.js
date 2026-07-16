@@ -18,5 +18,23 @@ contextBridge.exposeInMainWorld('alwaysHere', {
   onTrayCommand: (callback) => ipcRenderer.on('tray-command', (_event, command) => callback(command)),
   fetchHolidays: (year) => ipcRenderer.invoke('fetch-holidays', year),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  checkHotUpdate: () => ipcRenderer.invoke('check-hot-update')
+  checkHotUpdate: () => ipcRenderer.invoke('check-hot-update'),
+  resetConfig: () => ipcRenderer.invoke('reset-config'),
+  openPetFolder: (petId) => ipcRenderer.invoke('open-pet-folder', petId),
+  deletePet: (petId) => ipcRenderer.invoke('delete-pet', petId),
+  // ── 语音 / 小智对话 ──
+  voiceConnect: () => ipcRenderer.invoke('voice-connect'),
+  voiceDisconnect: () => ipcRenderer.invoke('voice-disconnect'),
+  voiceSendText: (text) => ipcRenderer.invoke('voice-send-text', text),
+  voiceAbort: () => ipcRenderer.invoke('voice-abort'),
+  voiceStatus: () => ipcRenderer.invoke('voice-status'),
+  voiceStartListen: (mode) => ipcRenderer.invoke('voice-start-listen', mode),
+  voiceStopListen: () => ipcRenderer.invoke('voice-stop-listen'),
+  voiceSendAudio: (frame) => ipcRenderer.invoke('voice-send-audio', frame),
+  voiceReregisterShortcut: () => ipcRenderer.invoke('voice-reregister-shortcut'),
+  // ── 看屏幕说话(视觉) ──
+  visionLookAndSay: () => ipcRenderer.invoke('vision-look-and-say'),
+  visionStartLoop: (minutes) => ipcRenderer.invoke('vision-start-loop', minutes),
+  visionStopLoop: () => ipcRenderer.invoke('vision-stop-loop'),
+  onVoiceEvent: (callback) => ipcRenderer.on('voice-event', (_event, data) => callback(data))
 })

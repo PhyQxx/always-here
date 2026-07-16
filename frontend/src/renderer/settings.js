@@ -15,6 +15,7 @@ import {
 } from './settingsScopes.mjs'
 import { applyWidgetPositions, applyTheme } from './utils/config.js'
 import { PET_CHAT_TONES, normalizePetChatSettings } from './widgets/petChatter.mjs'
+import { normalizeVoiceSettings, normalizeVisionSettings } from './widgets/voiceSettings.mjs'
 import { showToast, showConfirm } from './utils/ui.mjs'
 
 export function initSettings(getConfig, saveConfig) {
@@ -404,6 +405,82 @@ export function initSettings(getConfig, saveConfig) {
     }
   }
 
+  function initVoiceSettings() {
+    const enabledEl = document.getElementById('voice-enabled')
+    const autoplayEl = document.getElementById('voice-autoplay')
+    const urlEl = document.getElementById('voice-server-url')
+    const tokenEl = document.getElementById('voice-token')
+    const keyEl = document.getElementById('voice-trigger-key')
+    const keyHint = document.getElementById('voice-trigger-key-hint')
+    const deviceIdEl = document.getElementById('voice-device-id')
+    const testBtn = document.getElementById('voice-test-connect')
+    const testStatus = document.getElementById('voice-test-status')
+    if (!enabledEl || !urlEl) return
+
+    const config = getConfig()
+    config.voice = normalizeVoiceSettings(config.voice)
+
+    function render() {
+      const s = normalizeVoiceSettings(config.voice)
+      enabledEl.checked = s.enabled
+      if (autoplayEl) autoplayEl.checked = s.autoPlayTTS
+      urlEl.value = s.serverUrl
+      if (tokenEl) tokenEl.value = s.token
+      if (keyEl) keyEl.value = s.triggerKey
+      if (deviceIdEl) {
+        deviceIdEl.textContent = s.deviceId ? s.deviceId.slice(0, 13) + '…' : '(未生成)'
+      }
+    }
+
+    async function persist(next) {
+      config.voice = normalizeVoiceSettings(next)
+      render()
+      await saveConfig()
+      // 通知语音模块刷新可见性
+      window.dispatchEvent(new CustomEvent('voice-settings-changed'))
+    }
+
+    render()
+
+    enabledEl.addEventListener('change', () => persist({ ...config.voice, enabled: enabledEl.checked }))
+    if (autoplayEl) autoplayEl.addEventListener('change', () => persist({ ...config.voice, autoPlayTTS: autoplayEl.checked }))
+    urlEl.addEventListener('change', () => persist({ ...config.voice, serverUrl: urlEl.value }))
+    if (tokenEl) tokenEl.addEventListener('change', () => persist({ ...config.voice, token: tokenEl.value }))
+    if (keyEl) {
+      keyEl.addEventListener('change', async () => {
+        await persist({ ...config.voice, triggerKey: keyEl.value.trim() })
+        // 重新注册全局快捷键
+        await window.alwaysHere.voiceReregisterShortcut()
+        if (keyHint) {
+          keyHint.textContent = '已更新快捷键'
+          setTimeout(() => { if (keyHint) keyHint.textContent = '' }, 2000)
+        }
+      })
+    }
+
+    // 测试连接
+    if (testBtn) {
+      testBtn.addEventListener('click', async () => {
+        if (testStatus) testStatus.textContent = '连接中...'
+        // 先确保启用并保存最新地址
+        await persist({ ...config.voice, enabled: true })
+        const res = await window.alwaysHere.voiceConnect()
+        if (!res?.ok) {
+          if (testStatus) testStatus.textContent = res?.error || '连接失败'
+          return
+        }
+        // 等待 hello 回执
+        let connected = false
+        for (let i = 0; i < 30; i++) {
+          const s = await window.alwaysHere.voiceStatus()
+          if (s.connected) { connected = true; break }
+          await new Promise((r) => setTimeout(r, 100))
+        }
+        if (testStatus) testStatus.textContent = connected ? '✓ 连接成功' : '✗ 超时,检查地址/服务端'
+      })
+    }
+  }
+
   function initActivityPanel() {
     const openBtn = document.getElementById('activity-log-open')
     const openBtnWageman = document.getElementById('activity-log-open-wageman')
@@ -454,6 +531,48 @@ export function initSettings(getConfig, saveConfig) {
 
     return {
       open: openActivityPanel
+    }
+  }
+
+  function initVisionSettings() {
+    const enabledEl = document.getElementById('vision-enabled')
+    const intervalEl = document.getElementById('vision-interval')
+    const lookBtn = document.getElementById('vision-look-now')
+    const statusEl = document.getElementById('vision-status')
+    if (!enabledEl || !intervalEl) return
+
+    const config = getConfig()
+    config.vision = normalizeVisionSettings(config.vision)
+
+    function render() {
+      const s = normalizeVisionSettings(config.vision)
+      enabledEl.checked = s.enabled
+      intervalEl.value = s.autoIntervalMinutes
+    }
+
+    async function persist(next) {
+      config.vision = normalizeVisionSettings(next)
+      render()
+      await saveConfig()
+      // 同步定时循环到主进程
+      if (config.vision.enabled && config.vision.autoIntervalMinutes > 0) {
+        await window.alwaysHere.visionStartLoop(config.vision.autoIntervalMinutes)
+      } else {
+        await window.alwaysHere.visionStopLoop()
+      }
+    }
+
+    render()
+    enabledEl.addEventListener('change', () => persist({ ...config.vision, enabled: enabledEl.checked }))
+    intervalEl.addEventListener('change', () => persist({ ...config.vision, autoIntervalMinutes: Number(intervalEl.value) || 0 }))
+
+    if (lookBtn) {
+      lookBtn.addEventListener('click', async () => {
+        if (statusEl) statusEl.textContent = '正在看屏幕...'
+        // 经托盘命令路由到 petVoice
+        window.dispatchEvent(new CustomEvent('tray-command', { detail: { type: 'vision-look' } }))
+        setTimeout(() => { if (statusEl) statusEl.textContent = '' }, 3000)
+      })
     }
   }
 
@@ -626,6 +745,8 @@ export function initSettings(getConfig, saveConfig) {
   const petChatSettings = initPetChatSettings()
   const activityPanel = initActivityPanel()
   initWagemanSettings()
+  initVoiceSettings()
+  initVisionSettings()
 
   window.alwaysHere.onTrayCommand?.((command) => {
     const type = typeof command === 'string' ? command : command.type
@@ -637,6 +758,12 @@ export function initSettings(getConfig, saveConfig) {
     }
     if (type === 'show-activity') {
       activityPanel?.open()
+    }
+    if (type === 'voice-toggle') {
+      window.dispatchEvent(new CustomEvent('tray-command', { detail: command }))
+    }
+    if (type === 'vision-look') {
+      window.dispatchEvent(new CustomEvent('tray-command', { detail: command }))
     }
   })
 
