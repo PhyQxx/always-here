@@ -1,0 +1,12 @@
+{
+  "name": "always-here-workspace",
+  "version": "1.3.1",
+  "private": true,
+  "description": "桌面陪伴工具 + 小智 ESP32 语音服务端 单仓",
+  "scripts": {
+    "dev": "pnpm --filter always-here dev",
+    "start": "pnpm --filter always-here start",
+    "test": "pnpm --filter always-here test"
+  },
+  "license": "ISC"
+}

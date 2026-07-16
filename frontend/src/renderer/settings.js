@@ -413,6 +413,8 @@ export function initSettings(getConfig, saveConfig) {
     const keyEl = document.getElementById('voice-trigger-key')
     const keyHint = document.getElementById('voice-trigger-key-hint')
     const deviceIdEl = document.getElementById('voice-device-id')
+    const ttsVoiceEl = document.getElementById('voice-tts-voice')
+    const ttsVoiceHint = document.getElementById('voice-tts-voice-hint')
     const testBtn = document.getElementById('voice-test-connect')
     const testStatus = document.getElementById('voice-test-status')
     if (!enabledEl || !urlEl) return
@@ -427,6 +429,7 @@ export function initSettings(getConfig, saveConfig) {
       urlEl.value = s.serverUrl
       if (tokenEl) tokenEl.value = s.token
       if (keyEl) keyEl.value = s.triggerKey
+      if (ttsVoiceEl) ttsVoiceEl.value = s.ttsVoice
       if (deviceIdEl) {
         deviceIdEl.textContent = s.deviceId ? s.deviceId.slice(0, 13) + '…' : '(未生成)'
       }
@@ -454,6 +457,19 @@ export function initSettings(getConfig, saveConfig) {
         if (keyHint) {
           keyHint.textContent = '已更新快捷键'
           setTimeout(() => { if (keyHint) keyHint.textContent = '' }, 2000)
+        }
+      })
+    }
+
+    // 音色:保存后重连(voice 经 WS 查询参数下发,只在建连时生效)
+    if (ttsVoiceEl) {
+      ttsVoiceEl.addEventListener('change', async () => {
+        await persist({ ...config.voice, ttsVoice: ttsVoiceEl.value })
+        // voice 走查询参数,必须重连才生效
+        await window.alwaysHere.voiceConnect()
+        if (ttsVoiceHint) {
+          ttsVoiceHint.textContent = '已切换,重连生效'
+          setTimeout(() => { if (ttsVoiceHint) ttsVoiceHint.textContent = '' }, 2000)
         }
       })
     }
@@ -547,7 +563,7 @@ export function initSettings(getConfig, saveConfig) {
     function render() {
       const s = normalizeVisionSettings(config.vision)
       enabledEl.checked = s.enabled
-      intervalEl.value = s.autoIntervalMinutes
+      intervalEl.value = s.autoIntervalSeconds
     }
 
     async function persist(next) {
@@ -555,8 +571,8 @@ export function initSettings(getConfig, saveConfig) {
       render()
       await saveConfig()
       // 同步定时循环到主进程
-      if (config.vision.enabled && config.vision.autoIntervalMinutes > 0) {
-        await window.alwaysHere.visionStartLoop(config.vision.autoIntervalMinutes)
+      if (config.vision.enabled && config.vision.autoIntervalSeconds > 0) {
+        await window.alwaysHere.visionStartLoop(config.vision.autoIntervalSeconds)
       } else {
         await window.alwaysHere.visionStopLoop()
       }
@@ -564,7 +580,7 @@ export function initSettings(getConfig, saveConfig) {
 
     render()
     enabledEl.addEventListener('change', () => persist({ ...config.vision, enabled: enabledEl.checked }))
-    intervalEl.addEventListener('change', () => persist({ ...config.vision, autoIntervalMinutes: Number(intervalEl.value) || 0 }))
+    intervalEl.addEventListener('change', () => persist({ ...config.vision, autoIntervalSeconds: Number(intervalEl.value) || 0 }))
 
     if (lookBtn) {
       lookBtn.addEventListener('click', async () => {

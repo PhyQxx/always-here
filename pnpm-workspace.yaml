@@ -1,0 +1,7 @@
+packages:
+  - 'frontend'
+  - 'xiaozhi-server'
+allowBuilds:
+  electron: true
+onlyBuiltDependencies:
+  - electron
