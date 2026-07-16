@@ -162,7 +162,7 @@ function showBubble(text, options = {}) {
   const bubbleText = document.getElementById('pet-bubble-text')
   const moodIndicator = document.getElementById('pet-mood-indicator')
   if (!bubble || !bubbleText) return
-  
+
   if (moodIndicator) {
     const config = getConfigFn()
     const mood = getMoodLevel(config.happiness)
@@ -173,6 +173,9 @@ function showBubble(text, options = {}) {
   bubble.classList.remove('hidden')
   setBubbleActionsVisible(Boolean(options.confirmable))
   if (bubbleTimeout) clearTimeout(bubbleTimeout)
+  // persistent:不设自动关闭计时(语音回复用——逐句更新气泡,
+  // 等 TTS 真正说完后由调用方再触发一次带 duration 的 showBubble 收尾)
+  if (options.persistent) return
   bubbleTimeout = setTimeout(() => {
     if (options.confirmable) {
       finishPendingReminder('timeout')
@@ -285,6 +288,9 @@ async function tryAiChat(prompt) {
     showBubble('🤔 想想说什么...', { duration: 5000 })
     if (currentAnimation === 'idle') playAction('review')
     const text = prompt || '主动跟我说一句话,像桌面陪伴伙伴那样。'
+    // 登记:这是发给小智的引导指令,服务端 detect 模式会把它当 stt 回显,
+    // 但它不是真实用户发言,不应出现在前台气泡(petVoice.mjs 据此过滤)
+    window.dispatchEvent(new CustomEvent('pet-voice-system-prompt', { detail: text }))
     const res = await window.alwaysHere.voiceSendText(text)
     return Boolean(res?.ok)
   } catch {
@@ -399,11 +405,17 @@ export async function initPet(getConfig, saveConfig) {
     if (event.detail?.text) handleReminderEvent(event.detail)
   })
 
-  // 小智对话回复气泡:复用同一气泡,语音回复停留更久(说话中)
+  // 小智对话回复气泡:复用同一气泡。
+  // persistent 标记表示"小智正在说话,气泡逐句更新,不要自动关闭",
+  // 由 petVoice 在 TTS 说完后补发一次带 duration 的回复来收尾(自动隐藏)。
   window.addEventListener('pet-voice-reply', (event) => {
     if (!event.detail?.text) return
-    const duration = getConfigFn().voice?.bubbleDurationMs || 8000
-    showBubble(event.detail.text, { duration })
+    if (event.detail.persistent) {
+      showBubble(event.detail.text, { persistent: true })
+    } else {
+      const duration = getConfigFn().voice?.bubbleDurationMs || 8000
+      showBubble(event.detail.text, { duration })
+    }
   })
 
   window.addEventListener('pet-action', (event) => {
@@ -454,6 +466,8 @@ export async function initPet(getConfig, saveConfig) {
       window.dispatchEvent(new CustomEvent('pet-voice-show-bar'))
       return
     }
+    // 小智正在说话时,点击打断它
+    window.dispatchEvent(new CustomEvent('pet-voice-interrupt'))
     // 单击只做挥手回应,不触发对话(避免频繁打扰/联网)
     if (currentAnimation === 'idle') playAction('waving')
   })

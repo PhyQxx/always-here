@@ -60,11 +60,12 @@ const DEFAULT_CONFIG = {
     token: '',
     triggerKey: 'CommandOrControl+Shift+Space',
     autoPlayTTS: true,
-    bubbleDurationMs: 8000
+    bubbleDurationMs: 8000,
+    ttsVoice: '冰糖'
   },
   vision: {
-    enabled: false,           // 看屏幕说话总开关(隐私敏感,默认关)
-    autoIntervalMinutes: 0    // 定时看屏幕间隔,0=关闭定时
+    enabled: false,            // 看屏幕说话总开关(隐私敏感,默认关)
+    autoIntervalSeconds: 0     // 定时看屏幕间隔(秒),0=关闭定时
   },
   happiness: 70,
   noteText: '',
@@ -369,7 +370,8 @@ function normalizeVoiceConfig(input = {}) {
     autoPlayTTS: typeof input.autoPlayTTS === 'boolean' ? input.autoPlayTTS : fallback.autoPlayTTS,
     bubbleDurationMs: Number.isFinite(input.bubbleDurationMs)
       ? Math.max(2000, Math.round(input.bubbleDurationMs))
-      : fallback.bubbleDurationMs
+      : fallback.bubbleDurationMs,
+    ttsVoice: str(input.ttsVoice, fallback.ttsVoice)
   }
 }
 
@@ -391,8 +393,8 @@ function ensureVoiceDeviceIds(config) {
 function normalizeVisionConfig(input = {}) {
   return {
     enabled: typeof input.enabled === 'boolean' ? input.enabled : false,
-    autoIntervalMinutes: Number.isFinite(input.autoIntervalMinutes)
-      ? Math.max(0, Math.round(input.autoIntervalMinutes))
+    autoIntervalSeconds: Number.isFinite(input.autoIntervalSeconds)
+      ? Math.max(0, Math.round(input.autoIntervalSeconds))
       : 0
   }
 }
@@ -409,9 +411,13 @@ function voiceEmit(event) {
       if (event.state === 'start') {
         // 新一轮 TTS:重置解码器,清空上一轮残留
         opusDecoder.resetDecoder()
+        // AI 开始说话 → 对话进行中(刷新超时,因为接下来会持续有 tts 事件)
+        markConversationActive()
       } else if (event.state === 'stop') {
         // TTS 结束:flush 残余解码帧,确保播放完整
         opusDecoder.flush()
+        // AI 说完话 → 对话结束
+        markConversationIdle()
       }
       // tts 控制事件原样转发(start/sentence_start/stop)
       mainWindow.webContents.send('voice-event', event)
@@ -421,6 +427,11 @@ function voiceEmit(event) {
       if (event.state === 'disconnected' || event.state === 'error') {
         opusDecoder.flush()
         mainWindow.webContents.send('voice-event', { type: 'tts', state: 'stop' })
+        // 自动重连(带指数退避,避免服务未启动时疯狂重试)
+        scheduleReconnect()
+      }
+      if (event.state === 'connected') {
+        resetReconnect()
       }
       mainWindow.webContents.send('voice-event', event)
       break
@@ -441,6 +452,9 @@ opusDecoder.setOnChunk((float32Array) => {
 })
 
 function voiceConnect() {
+  // 主动连接(用户触发或重连):清除"手动断开"标记,重置退避计数
+  voiceManualDisconnect = false
+  resetReconnect()
   const config = ensureVoiceDeviceIds(loadConfig())
   voiceCurrentConfig = normalizeVoiceConfig(config.voice)
   // 已有连接先断开
@@ -453,12 +467,52 @@ function voiceConnect() {
 }
 
 function voiceDisconnect() {
+  // 手动断开:标记后重连逻辑不再触发
+  voiceManualDisconnect = true
+  resetReconnect()
   if (voiceClient) {
     try { voiceClient.disconnect() } catch { /* noop */ }
     voiceClient = null
   }
   opusDecoder.flush()
   opusDecoder.destroy()
+}
+
+// ── 断线自动重连(指数退避) ──
+let voiceManualDisconnect = false
+let reconnectTimer = null
+let reconnectAttempt = 0
+const RECONNECT_DELAYS = [2000, 3000, 5000, 8000, 15000] // 指数退避,最长 15s
+
+function resetReconnect() {
+  reconnectAttempt = 0
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+}
+
+function scheduleReconnect() {
+  // 用户主动断开,或语音未启用,不重连
+  if (voiceManualDisconnect) return
+  const config = loadConfig()
+  if (!normalizeVoiceConfig(config.voice).enabled) return
+  if (reconnectTimer) return // 已有重连在排队
+
+  const delay = RECONNECT_DELAYS[Math.min(reconnectAttempt, RECONNECT_DELAYS.length - 1)]
+  reconnectAttempt++
+  voiceEmit({ type: 'status', state: 'reconnecting', attempt: reconnectAttempt, delay })
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    if (voiceManualDisconnect) return
+    // 重连(复用 voiceConnect,它会先断开旧连接)
+    voiceManualDisconnect = false
+    voiceConnect()
+  }, delay)
+}
+
+// voiceConnect 时重置手动断开标记
+function voiceConnectWithReconnect() {
+  voiceManualDisconnect = false
+  resetReconnect()
+  voiceConnect()
 }
 
 ipcMain.handle('voice-connect', async () => {
@@ -486,6 +540,10 @@ ipcMain.handle('voice-send-text', async (_, text) => {
     return { ok: false, error: '未连接到小智服务端' }
   }
   const sent = voiceClient.sendText(text)
+  if (sent) {
+    // 用户发了消息 → 进入对话(AI 将思考并说话),期间定时看屏幕不应打断
+    markConversationActive()
+  }
   return { ok: sent }
 })
 ipcMain.handle('voice-abort', async () => {
@@ -512,11 +570,79 @@ ipcMain.handle('voice-stop-listen', async () => {
   return { ok: voiceClient.stopListen() }
 })
 
+// M5:语音识别(前端直连 mimo ASR,绕过小智服务端 ASR 模块)
+// 渲染进程采集麦克风 PCM → 转 WAV → 经 IPC 传来 → 调 mimo ASR → 返回识别文字
+ipcMain.handle('voice-asr', async (_, wavBuffer) => {
+  try {
+    if (!wavBuffer || wavBuffer.length === 0) return { ok: false, error: '空音频' }
+    const buf = Buffer.from(wavBuffer)
+    // mimo ASR:chat/completions + input_audio(base64 wav)
+    const https = require('https')
+    const b64 = buf.toString('base64')
+    const body = JSON.stringify({
+      model: 'mimo-v2.5-asr',
+      messages: [{ role: 'user', content: [
+        { type: 'input_audio', input_audio: { data: b64, format: 'wav' } }
+      ]}]
+    })
+    const result = await new Promise((resolve) => {
+      const req = https.request(MIMO_CHAT_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${MIMO_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body)
+        }
+      }, (res) => {
+        let data = ''
+        res.on('data', (c) => data += c)
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data)
+            const text = json.choices?.[0]?.message?.content?.trim()
+            resolve(text || '')
+          } catch { resolve('') }
+        })
+      })
+      req.on('error', () => resolve(''))
+      req.setTimeout(15000, () => { req.destroy(); resolve('') })
+      req.write(body)
+      req.end()
+    })
+    return { ok: true, text: result }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+})
+
 // ── 看屏幕说话(视觉) ────────────────────────────────────────────
 // 流程:desktopCapturer 截屏 → JPEG → POST 到小智视觉接口(8003)→ 智谱看图
 //       → 得到屏幕描述 → 作为 prompt 发给小智 LLM 让宠物说话
 // 隐私:截屏会发送到智谱服务器,默认关闭,需用户在设置显式开启。
 let visionTimer = null
+// 对话是否进行中(宠物正在说话,或刚收到用户输入正在思考)。
+// 定时看屏幕的主动搭话必须避开对话进行中的时刻,否则会打断当前对话。
+let conversationActive = false
+let conversationActiveTimer = null
+// 用户发消息后,AI 还没开始说话的"思考期"也算对话进行中,超时后自动解除。
+const CONVERSATION_THINKING_TIMEOUT_MS = 12000
+
+// 标记对话开始(用户发消息 或 AI 开始说话)
+function markConversationActive() {
+  conversationActive = true
+  if (conversationActiveTimer) clearTimeout(conversationActiveTimer)
+  conversationActiveTimer = setTimeout(() => {
+    // 兜底:如果迟迟没等到 tts stop(网络异常/服务端没回),超时自动解除
+    conversationActive = false
+    conversationActiveTimer = null
+  }, CONVERSATION_THINKING_TIMEOUT_MS)
+}
+
+// 标记对话结束(AI 说完话)
+function markConversationIdle() {
+  conversationActive = false
+  if (conversationActiveTimer) { clearTimeout(conversationActiveTimer); conversationActiveTimer = null }
+}
 
 // 截屏并调用小智视觉接口,返回 {ok, description?}
 async function captureAndDescribe() {
@@ -589,7 +715,7 @@ ipcMain.handle('vision-look-and-say', async () => {
     return { ok: false, error: result.error }
   }
   // 把屏幕描述作为 prompt 发给小智,让它以宠物口吻评论
-  const prompt = `你刚看到用户的屏幕:${result.description}。以桌面陪伴宠物的口吻,用一句话(20字以内)自然地评论或关心一下,不要太机械。`
+  const prompt = `你刚看到用户的屏幕:${result.description}。以桌面陪伴宠物的口吻,用一句话自然地评论或关心一下,不要太机械。`
   const sent = await sendToXiaozhiIfConnected(prompt)
   if (sent) {
     voiceEmit({ type: 'vision-description', description: result.description })
@@ -601,12 +727,14 @@ ipcMain.handle('vision-look-and-say', async () => {
 // 定时看屏幕:AI 自主决定要不要说话(大部分时候安静)
 // 先用轻量 LLM 判断(直接调 mimo,不触发 TTS),决定说才走完整小智链路
 ipcMain.handle('vision-check-and-maybe-say', async () => {
+  // 对话进行中时不主动搭话,避免打断当前对话
+  if (conversationActive) return { ok: true, decided: false, reason: 'conversation-active' }
   const result = await captureAndDescribe()
   if (!result.ok) return { ok: false, decided: false }
 
   // 第一步:轻量判断 —— 直接调 mimo LLM(不经小智 TTS),问"要不要说话 + 说什么"
   const judgePrompt = `你是桌面陪伴宠物,刚看到用户屏幕:${result.description}。
-判断现在适不适合主动搭一句话。规则:专注工作时通常不打扰;摸鱼/休息/发呆时可以搭话;大部分时候选择安静。
+判断现在适不适合主动搭一句话。规则:可以适度主动搭话,不用太拘谨;看到摸鱼/休息/发呆时更可以搭;只有在用户明显高度专注(如调试/开会/写关键代码)时才忍住。
 如果你决定说:直接回复要说的话(15字以内,自然不机械)。
 如果你决定不说:只回复 SILENT。`
   const judgeResult = await askMimoLlm(judgePrompt)
@@ -658,45 +786,60 @@ function askMimoLlm(prompt) {
 }
 
 // 辅助:确保小智已连接后发文本
+// 仅用于内部指令(看屏幕、主动搭话等),非真实用户输入。
+// 这些指令会被小智 detect 模式当成 stt 回显,故发送后登记给渲染进程过滤,避免泄漏到气泡。
 async function sendToXiaozhiIfConnected(text) {
-  if (voiceClient && voiceClient.isConnected) {
-    voiceClient.sendText(text)
-    return true
+  const send = () => {
+    if (voiceClient && voiceClient.isConnected) {
+      voiceClient.sendText(text)
+      // 通知渲染进程:这是发给 AI 的指令,回显 stt 时应跳过
+      voiceEmit({ type: 'system-prompt', text })
+      return true
+    }
+    return false
   }
+  if (send()) return true
   voiceConnect()
   for (let i = 0; i < 20 && (!voiceClient || !voiceClient.isConnected); i++) {
     await new Promise((r) => setTimeout(r, 100))
   }
-  if (voiceClient && voiceClient.isConnected) {
-    voiceClient.sendText(text)
-    return true
-  }
-  return false
+  return send()
 }
 
 // 启停定时看屏幕
-ipcMain.handle('vision-start-loop', async (_, intervalMinutes) => {
+// 注意:主进程内没有 ipcMain.invoke(那是 ipcRenderer 的方法)。
+// 这里把"启动循环"抽成普通函数,IPC handler 和开机自启都直接调用,
+// 避免之前用 ipcMain.invoke('vision-start-loop') 触发自身导致的
+// "ipcMain.invoke is not a function" 未处理 rejection。
+function startVisionLoop(intervalSeconds) {
   stopVisionLoop()
-  const mins = Math.max(1, Math.round(Number(intervalMinutes) || 10))
+  const secs = Math.max(1, Math.round(Number(intervalSeconds) || 60))
+  console.log(`[vision] 启动定时看屏幕循环:间隔 ${secs} 秒`)
   visionTimer = setInterval(() => {
     // 定时触发:AI 自主决定要不要说话(不打扰专注中的用户)
     // 直接在主进程完成截屏+判断+说话,不经过渲染进程
     const config = normalizeVisionConfig(loadConfig().vision)
     if (!config.enabled) return
+    // 对话进行中(用户刚发消息,或宠物正在说话)时不主动搭话,避免打断当前对话
+    if (conversationActive) return
     captureAndDescribe().then((result) => {
       if (!result.ok) return
       const judgePrompt = `你是桌面陪伴宠物,刚看到用户屏幕:${result.description}。
-判断现在适不适合主动搭一句话。规则:专注工作时通常不打扰;摸鱼/休息/发呆时可以搭话;大部分时候选择安静。
+判断现在适不适合主动搭一句话。规则:可以适度主动搭话,不用太拘谨;看到摸鱼/休息/发呆时更可以搭;只有在用户明显高度专注(如调试/开会/写关键代码)时才忍住。
 如果你决定说:直接回复要说的话(15字以内,自然不机械)。
 如果你决定不说:只回复 SILENT。`
       askMimoLlm(judgePrompt).then((judgeResult) => {
         if (!judgeResult || judgeResult.toUpperCase().includes('SILENT')) return
+        // 发送前最后一道检查:截屏+识别+判断是异步的,期间用户可能开始了对话
+        if (conversationActive) return
         sendToXiaozhiIfConnected(`请直接重复这句话,不加任何其它内容:${judgeResult}`)
       })
     })
-  }, mins * 60 * 1000)
+  }, secs * 1000)
   return { ok: true }
-})
+}
+
+ipcMain.handle('vision-start-loop', async (_, intervalMinutes) => startVisionLoop(intervalMinutes))
 
 ipcMain.handle('vision-stop-loop', async () => {
   stopVisionLoop()
@@ -724,10 +867,11 @@ app.whenReady().then(() => {
   registerVoiceShortcut()
 
   // 启动看屏幕定时循环(若已启用)
+  // 直接调用 startVisionLoop,不要用 ipcMain.invoke(主进程没有这个方法)。
   const initConfig = loadConfig()
   const visionCfg = normalizeVisionConfig(initConfig.vision)
-  if (visionCfg.enabled && visionCfg.autoIntervalMinutes > 0) {
-    ipcMain.invoke('vision-start-loop', visionCfg.autoIntervalMinutes)
+  if (visionCfg.enabled && visionCfg.autoIntervalSeconds > 0) {
+    startVisionLoop(visionCfg.autoIntervalSeconds)
   }
 
   // 初始化更新检查
