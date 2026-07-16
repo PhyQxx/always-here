@@ -8,7 +8,7 @@ export const MAX_PET_CHAT_INTERVAL_MINUTES = 60
 
 export const DEFAULT_PET_CHAT_SETTINGS = {
   enabled: true,
-  intervalMinutes: 1,
+  intervalMinutes: 10,
   quietMode: false,
   tone: 'companion'
 }
@@ -192,9 +192,9 @@ export function pickPetChatLine({
   const mood = getMoodLevel(happiness)
 
   if (mood === MOOD_LEVELS.GRUMPY) {
-    // Favor snarky/shorter/questioning lines
-    const snarky = lines.filter(l => l.includes('...') || l.includes('？') || l.includes('别') || l.includes('快'))
-    if (snarky.length > 0 && random() > 0.3) filtered = snarky
+    // 低好感度:不选冷淡刻薄的台词,优先温柔关心+小委屈的(符合雏田宝宝性格)
+    const gentle = lines.filter(l => l.includes('…') || l.includes('呢') || l.includes('哦') || l.includes('吧') || l.includes('呀'))
+    if (gentle.length > 0 && random() > 0.3) filtered = gentle
   } else if (mood === MOOD_LEVELS.HAPPY) {
     // Favor encouraging/warmer lines
     const warm = lines.filter(l => !l.includes('...') && (l.includes('❤') || l.includes('♪') || l.includes('棒') || l.includes('好')))

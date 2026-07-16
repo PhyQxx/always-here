@@ -51,3 +51,39 @@ test('getDragActionFromMovement falls back to total drag distance', async () => 
   assert.equal(getDragActionFromMovement(-1, -20), 'runningLeft')
   assert.equal(getDragActionFromMovement(0, 2), null)
 })
+
+test('v1 pets fall back from rich actions without drawing out-of-range rows', async () => {
+  const { getSupportedActions, resolvePetAction } = await loadAnimations()
+  const supported = getSupportedActions(null, 1872)
+
+  assert.equal(supported.size, 9)
+  assert.equal(resolvePetAction('dance', supported), 'waving')
+  assert.equal(resolvePetAction('sleep', supported), 'waiting')
+  assert.equal(resolvePetAction('study', supported), 'review')
+  assert.equal(resolvePetAction('stomp', supported), 'failed')
+})
+
+test('v2 capabilities enable only declared actions that fit the image', async () => {
+  const { getSupportedActions, resolvePetAction } = await loadAnimations()
+  const supported = getSupportedActions(['idle', 'cheer', 'study', 'eat'], 17 * 208)
+
+  assert.equal(resolvePetAction('cheer', supported), 'cheer')
+  assert.equal(resolvePetAction('study', supported), 'study')
+  assert.equal(resolvePetAction('eat', supported), 'idle')
+})
+
+test('unknown actions resolve safely to idle', async () => {
+  const { getSupportedActions, resolvePetAction } = await loadAnimations()
+  const supported = getSupportedActions(null, 1872)
+
+  assert.equal(resolvePetAction('not-real', supported), 'idle')
+})
+
+test('ambient actions vary by happiness and avoid immediate repeats', async () => {
+  const { pickAmbientActionByContext } = await loadAnimations()
+
+  assert.equal(pickAmbientActionByContext({ happiness: 90, random: () => 0 }), 'dance')
+  assert.equal(pickAmbientActionByContext({ happiness: 90, lastAction: 'dance', random: () => 0 }), 'cheer')
+  assert.equal(pickAmbientActionByContext({ happiness: 10, random: () => 0 }), 'yawn')
+  assert.equal(pickAmbientActionByContext({ happiness: 60, random: () => 0 }), 'waving')
+})

@@ -11,15 +11,23 @@ h2 { margin-top: 20px; }
 </style>
 </head>
 <body>
-<h2>Spritesheet Preview: 9 rows × 8 columns</h2>
+<h2 id="title">Spritesheet Preview</h2>
 <div id="grid"></div>
 <script>
 const img = new Image();
 img.onload = () => {
   const W = img.width, H = img.height;
-  const ROWS = 9, COLS = 8;
-  const strideY = 209, strideX = 192;
-  const contentH = 198;
+  const COLS = 8;
+  const strideY = 208, strideX = 192;
+  const contentH = 208;
+  const ROWS = Math.floor(H / strideY);
+  const actionNames = [
+    'idle', 'runningRight', 'runningLeft', 'waving', 'jumping',
+    'failed', 'waiting', 'running', 'review', 'dance', 'cheer',
+    'spin', 'sleep', 'yawn', 'stretch', 'nod', 'study', 'stomp', 'eat'
+  ];
+  document.getElementById('title').textContent =
+    'Spritesheet Preview: ' + ROWS + ' rows × ' + COLS + ' columns (' + W + '×' + H + ')';
 
   const grid = document.getElementById('grid');
   grid.style.gridTemplateColumns = 'repeat(' + COLS + ', 100px)';
@@ -34,7 +42,7 @@ img.onload = () => {
       const ctx = canvas.getContext('2d');
 
       const sx = col * strideX;
-      const sy = row * strideY + (row === 0 ? 0 : 0);
+      const sy = row * strideY;
       const sw = strideX;
       const sh = contentH;
 
@@ -57,7 +65,7 @@ img.onload = () => {
 
       const label = document.createElement('div');
       label.className = 'label';
-      label.textContent = 'R' + row + 'C' + col + (hasContent ? '' : ' (empty)');
+      label.textContent = (actionNames[row] || ('R' + row)) + ' C' + col + (hasContent ? '' : ' (empty)');
       cell.appendChild(canvas);
       cell.appendChild(label);
       grid.appendChild(cell);
@@ -86,6 +94,6 @@ img.onload = () => {
   }
   console.log('DONE');
 };
-img.src = 'spritesheet.webp';
+img.src = 'pets/hina/spritesheet.webp';
 </script>
 </body></html>

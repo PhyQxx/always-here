@@ -5,23 +5,77 @@
 }
 
 .pet-container {
+  position: relative;
   width: 130px;
   height: 150px;
   cursor: grab;
 }
 
 #pet-canvas {
+  position: relative;
+  z-index: 1;
   width: 130px;
   height: 150px;
 }
 
+.pet-emote-layer {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.pet-emote {
+  position: absolute;
+  top: 15px;
+  left: calc(50% + var(--emote-x, 0px));
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72);
+  transform: translateX(-50%);
+  animation: emoteFloat 1.8s ease-out forwards;
+}
+
+.pet-emote.persistent {
+  top: 7px;
+  left: 76%;
+  animation: emoteBob 1.2s ease-in-out infinite;
+}
+
+@keyframes emoteFloat {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(0.65); }
+  20% { opacity: 1; transform: translate(-50%, 0) scale(1.12); }
+  100% { opacity: 0; transform: translate(-50%, -38px) scale(0.95); }
+}
+
+@keyframes emoteBob {
+  0%, 100% { opacity: 0.75; transform: translate(-50%, 0) rotate(-5deg); }
+  50% { opacity: 1; transform: translate(-50%, -6px) rotate(4deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-emote,
+  .pet-emote.persistent {
+    animation-name: emoteFade;
+    animation-duration: 1.2s;
+  }
+
+  .pet-emote.persistent {
+    animation-iteration-count: infinite;
+  }
+}
+
+@keyframes emoteFade {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
 .pet-bubble {
   position: absolute;
-  /* 锚定底部:无论内容多长,气泡都向上生长,避免向下遮挡宠物 */
-  bottom: 100%;
-  margin-bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
   min-width: 200px;
   max-width: 280px;
   max-height: 45vh;
@@ -40,6 +94,47 @@
   pointer-events: auto;
 }
 
+/* 方向锚点:通过 top/right/left/bottom + margin 切换气泡相对宠物的位置。
+   居中变换放在 transform(垂直方向 translateX(-50%),水平方向 translateY(-50%))。
+   默认(无显式类或 .bubble-pos-top):向上生长 */
+.pet-bubble,
+.pet-bubble.bubble-pos-top {
+  bottom: 100%;
+  margin-bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* 向下:出现在宠物下方 */
+.pet-bubble.bubble-pos-bottom {
+  top: 100%;
+  bottom: auto;
+  margin-top: 16px;
+  margin-bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* 向右:出现在宠物右侧,垂直居中 */
+.pet-bubble.bubble-pos-right {
+  left: 100%;
+  right: auto;
+  bottom: auto;
+  top: 50%;
+  margin-left: 16px;
+  transform: translateY(-50%);
+}
+
+/* 向左:出现在宠物左侧,垂直居中 */
+.pet-bubble.bubble-pos-left {
+  right: 100%;
+  left: auto;
+  bottom: auto;
+  top: 50%;
+  margin-right: 16px;
+  transform: translateY(-50%);
+}
+
 .pet-mood-indicator {
   position: absolute;
   top: 6px;
@@ -48,19 +143,94 @@
   opacity: 0.8;
 }
 
+/* 小三角箭头:指向宠物。默认(向上/bubble-pos-top)在气泡底部、朝下 */
 .pet-bubble::after {
   content: '';
   position: absolute;
+  width: 0;
+  height: 0;
+}
+
+/* 向上:箭头在底部居中,朝下指向宠物 */
+.pet-bubble::after,
+.pet-bubble.bubble-pos-top::after {
   left: 50%;
   bottom: -6px;
+  top: auto;
   transform: translateX(-50%);
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
   border-top: 6px solid var(--bg-solid);
+  border-bottom: none;
+}
+
+/* 向下:箭头在顶部居中,朝上指向宠物 */
+.pet-bubble.bubble-pos-bottom::after {
+  left: 50%;
+  top: -6px;
+  bottom: auto;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid var(--bg-solid);
+  border-top: none;
+}
+
+/* 向右:箭头在左侧居中,朝右指向宠物 */
+.pet-bubble.bubble-pos-right::after {
+  left: -6px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 6px solid var(--bg-solid);
+  border-left: none;
+}
+
+/* 向左:箭头在右侧居中,朝左指向宠物 */
+.pet-bubble.bubble-pos-left::after {
+  right: -6px;
+  left: auto;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 6px solid var(--bg-solid);
+  border-right: none;
 }
 
 .pet-bubble.hidden {
   display: none;
+}
+
+/* ── 思考中气泡:工具调用期间的三点跳动 loading 样式 ── */
+/* petVoice 检测到服务端 "% <function_name>" stt 回显后,发 'think' 标记触发。
+   后续 tts sentence_start 的普通 💬 消息会清除 .thinking 恢复常态。
+   注意:窗口是透明的,气泡必须保留深色 --bg-solid 背景才能保证白字可读,
+   只用 accent 边框 + 圆点动画来区分思考态(适配所有主题)。 */
+.pet-bubble.thinking {
+  padding: 14px 20px;
+  background: var(--bg-solid);
+  border: 1px solid var(--accent);
+  overflow: hidden;
+}
+
+/* 三个跳动的圆点:用 accent 色,放在文案上方,整体做一次呼吸式上下跳动 */
+.pet-bubble.thinking #pet-bubble-text::before {
+  content: '●  ●  ●';
+  display: block;
+  letter-spacing: 7px;
+  font-size: 17px;
+  margin-bottom: 6px;
+  color: var(--accent);
+  animation: petThinkingDots 1.2s ease-in-out infinite;
+}
+
+@keyframes petThinkingDots {
+  0%, 80%, 100% { opacity: 0.4;  transform: translateY(0); }
+  40%           { opacity: 1;    transform: translateY(-3px); }
 }
 
 .pet-bubble-actions {
@@ -108,9 +278,10 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+/* 纯 opacity 淡入:不写 transform,避免覆盖方向类(top/right/left)的居中变换 */
 @keyframes petBubbleIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* ── 语音 / 对话输入栏 ── */

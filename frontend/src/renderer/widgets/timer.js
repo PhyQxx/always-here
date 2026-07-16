@@ -82,7 +82,6 @@ function handlePomodoroComplete() {
     // Switch to break
     timerState.phase = 'break'
     timerState.remaining = timerSettings.breakTime * 60 * 1000
-    window.dispatchEvent(new CustomEvent('pet-action', { detail: 'waving' }))
   } else {
     window.alwaysHere.showNotification({
       title: '休息时间结束',

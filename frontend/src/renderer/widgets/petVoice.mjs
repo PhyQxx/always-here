@@ -10,7 +10,7 @@
 //  - 所有特权能力经 window.alwaysHere 暴露的 IPC,沿用 contextIsolation 安全模型。
 
 import { normalizeVoiceSettings } from './voiceSettings.mjs'
-import { emotionToAnimation, VOICE_PHASE_ANIMATION } from './voiceEmotion.mjs'
+import { emotionToAnimation, emotionToEmote, VOICE_PHASE_ANIMATION } from './voiceEmotion.mjs'
 
 let getConfigFn = null
 let saveConfigFn = null
@@ -162,14 +162,27 @@ function handleVoiceEvent(event) {
       break
     case 'stt':
       // 显示识别到的用户语音文字(M5)或文字输入回显
-      // 但跳过本端主动发出的"引导 prompt"(如宠物主动找话),那些是发给 AI 的指令,不是用户发言
-      if (event.text && !consumeSystemPrompt(event.text)) {
-        showVoiceBubble(`🧑 ${event.text}`)
+      if (event.text) {
+        // 工具调用回显(服务端 unified_tool_handler 发的 "% <function_name>",
+        // 如 "% get_news_from_newsnow"):不在气泡里显示原始函数名,
+        // 改为展示一个"思考中"样式气泡(详见 pet.js 的 'think' 标记处理)
+        if (event.text.startsWith('% ')) {
+          showVoiceBubble('think')
+          setPetAnimation(VOICE_PHASE_ANIMATION.thinking)
+          break
+        }
+        // 跳过本端主动发出的"引导 prompt"(如宠物主动找话),那些是发给 AI 的指令,不是用户发言
+        if (!consumeSystemPrompt(event.text)) {
+          showVoiceBubble(`🧑 ${event.text}`)
+        }
       }
       break
     case 'llm':
       // 情绪驱动宠物动画
       setPetAnimation(emotionToAnimation(event.emotion))
+      if (emotionToEmote(event.emotion)) {
+        window.dispatchEvent(new CustomEvent('pet-emote', { detail: emotionToEmote(event.emotion) }))
+      }
       break
     case 'tts':
       if (event.state === 'start') {
@@ -206,14 +219,9 @@ function handleVoiceEvent(event) {
         showVoiceBubble('🔄 与小智断开,正在重连...')
       }
       break
-    case 'vision-tick':
-      // 定时看屏幕触发
-      lookAndSay()
-      break
     case 'vision-description':
-      // 截屏描述回来,显示"看屏幕中",后续 LLM 回复由 tts 事件展示
-      showVoiceBubble(`👀 看了看屏幕...`)
-      setPetAnimation(VOICE_PHASE_ANIMATION.thinking)
+      // 截屏描述已发给小智;不重复显示气泡(lookAndSay 已显示过提示),
+      // 后续宠物台词由 tts 事件展示
       break
     case 'vision-error':
       showVoiceBubble(`⚠️ ${event.message || '看屏幕失败'}`)
@@ -254,7 +262,20 @@ async function sendText(text) {
     setPetAnimation(VOICE_PHASE_ANIMATION.idle)
     return
   }
-  await window.alwaysHere.voiceSendText(trimmed)
+  // P1-1:检测到便签相关意图时,把便签内容附带进去,让 AI 能回答"先做什么"
+  const textToSend = enrichWithNoteContext(trimmed)
+  await window.alwaysHere.voiceSendText(textToSend)
+}
+
+// 便签意图检测:用户问"先做什么/待办/该干嘛"时,把便签内容拼进 prompt
+function enrichWithNoteContext(userText) {
+  const noteIntent = /(先做|该做|待办|该干|做什么|安排|计划|任务|todo)/i.test(userText)
+  if (!noteIntent) return userText
+  const noteText = getConfigFn().noteText || ''
+  if (!noteText.trim()) return userText
+  // 截取前 500 字避免 prompt 过长
+  const excerpt = noteText.length > 500 ? noteText.slice(0, 500) + '...' : noteText
+  return `${userText}\n\n[用户便签内容]\n${excerpt}\n\n请结合便签内容回答。`
 }
 
 // 看屏幕说话:截屏 → 小智视觉描述 → 小智 LLM 以宠物口吻评论
@@ -286,7 +307,7 @@ function buildInputUI() {
       <span class="pet-voice-mic-icon">🎤</span>
     </button>
     <input type="text" id="pet-voice-input" class="pet-voice-input"
-           placeholder="说点什么..." autocomplete="off" maxlength="200" />
+           placeholder="聊天、问天气、查新闻..." autocomplete="off" maxlength="200" />
     <button type="button" id="pet-voice-send" class="pet-voice-btn send" title="发送" aria-label="发送">
       <span class="pet-voice-send-icon">➤</span>
     </button>
@@ -337,6 +358,8 @@ function hideVoiceBar() {
   const bar = document.getElementById('pet-voice-bar')
   if (bar) bar.classList.add('hidden')
   if (inputEl) inputEl.blur()
+  // 隐藏输入栏时,如果正在录音必须停掉,否则麦克风指示灯一直亮(资源泄漏)
+  if (listening) stopListening()
 }
 
 function toggleVoiceBar() {
@@ -477,6 +500,8 @@ function applyVoiceBarVisibility() {
     bar.classList.remove('hidden')
   } else {
     bar.classList.add('hidden')
+    // 禁用时停掉正在进行的录音,释放麦克风
+    if (listening) stopListening()
   }
 }
 
@@ -499,6 +524,10 @@ export async function initPetVoice(getConfig, saveConfig) {
   // 下行事件
   window.alwaysHere.onVoiceEvent(handleVoiceEvent)
 
+  // 页面关闭/隐藏时释放麦克风(避免麦克风指示灯常亮)
+  window.addEventListener('pagehide', () => { if (listening) stopListening() })
+  window.addEventListener('beforeunload', () => { if (listening) stopListening() })
+
   // 快捷键 / 托盘触发(复用现有 tray-command 路由)
   window.addEventListener('tray-command', (event) => {
     const payload = event.detail
@@ -513,10 +542,7 @@ export async function initPetVoice(getConfig, saveConfig) {
     if (bar?.classList.contains('hidden')) showVoiceBar()
   })
 
-  // 点击宠物打断小智说话(pet.js 发来)
-  window.addEventListener('pet-voice-interrupt', () => {
-    interruptSpeaking()
-  })
+  // 注:打断已改为发送消息时触发,不再在点击宠物时打断(见 sendText)
 
   // 登记本端发给小智的"引导 prompt"(如宠物主动找话)。
   // 这类文本是发给 AI 的指令,detect 模式仍会回 stt,但不应在气泡里当作用户发言显示。

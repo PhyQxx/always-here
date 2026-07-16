@@ -6,11 +6,11 @@ export const MOOD_LEVELS = {
 
 export const HAPPINESS_IMPACT = {
   'reminder-done': 5,
-  'reminder-skipped': -2,
-  'reminder-timeout': -4,
+  'reminder-skipped': -1,
+  'reminder-timeout': -2,
   'pomodoro-done': 10,
   'work-stop': 2,
-  'overtime-penalty': -5 // applied per hour of overtime
+  'overtime-penalty': -3 // applied per hour of overtime
 }
 
 export function getMoodLevel(happiness) {

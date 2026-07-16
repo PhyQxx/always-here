@@ -81,6 +81,27 @@ test('getPetSpritesheetDataUrl returns a webp data URL for a selected pet', () =
   assert.equal(result.id, 'hina')
   assert.equal(result.mimeType, 'image/webp')
   assert.match(result.dataUrl, /^data:image\/webp;base64,/)
+  assert.equal(result.animationVersion, 1)
+  assert.equal(result.cellWidth, 192)
+  assert.equal(result.cellHeight, 208)
+  assert.equal(result.supportedActions, null)
+})
+
+test('getPetSpritesheetDataUrl returns normalized v2 animation capabilities', () => {
+  const root = makeTempPetsRoot()
+  writePet(root, 'hina-v2', {
+    id: 'hina-v2',
+    spritesheetPath: 'spritesheet.webp',
+    animationVersion: 2,
+    cellWidth: 192,
+    cellHeight: 208,
+    supportedActions: ['idle', 'study', 'study', '', 42]
+  })
+
+  const result = getPetSpritesheetDataUrl(root, 'hina-v2')
+
+  assert.equal(result.animationVersion, 2)
+  assert.deepEqual(result.supportedActions, ['idle', 'study'])
 })
 
 test('listPets includes built-in pets when configured pets root is missing', () => {

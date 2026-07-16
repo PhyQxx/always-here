@@ -8,7 +8,7 @@ async function loadPetChatter() {
   return import(moduleUrl.href)
 }
 
-test('pet chatter speaks once per minute with a short bubble duration', async () => {
+test('pet chatter speaks once per ten minutes with a short bubble duration', async () => {
   const {
     PET_CHAT_BUBBLE_DURATION_MS,
     PET_CHAT_INTERVAL_MS,
@@ -18,7 +18,7 @@ test('pet chatter speaks once per minute with a short bubble duration', async ()
 
   assert.equal(PET_CHAT_INTERVAL_MS, 60 * 1000)
   assert.equal(PET_CHAT_BUBBLE_DURATION_MS, 5000)
-  assert.equal(getPetChatIntervalMs(normalizePetChatSettings({})), 60 * 1000)
+  assert.equal(getPetChatIntervalMs(normalizePetChatSettings({})), 10 * 60 * 1000)
   assert.equal(getPetChatIntervalMs(normalizePetChatSettings({ intervalMinutes: 5 })), 5 * 60 * 1000)
 })
 
@@ -27,7 +27,7 @@ test('pet chatter settings normalize disabled quiet mode and interval bounds', a
 
   assert.deepEqual(normalizePetChatSettings({}), {
     enabled: true,
-    intervalMinutes: 1,
+    intervalMinutes: 10,
     quietMode: false,
     tone: 'companion'
   })

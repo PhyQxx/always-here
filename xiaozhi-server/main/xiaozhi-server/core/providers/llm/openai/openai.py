@@ -17,6 +17,27 @@ THINKING_DISABLED_DOMAINS = {
     "volces.com": {"thinking": {"type": "disabled"}},
 }
 
+# 服务端内容安全审核被拒时的特征文案（如 MiMo/Kimi 等会把这句英文塞进正常 content 流里）
+# 命中即判定为审核拦截，丢弃该内容，避免报错文本被 TTS 念出来
+CONTENT_MODERATION_MARKERS = (
+    "the request was rejected because it was considered high risk",
+    "content_filter",
+    "content policy",
+    "I cannot fulfill",
+    "I'm unable to",
+    "我无法提供",
+    "内容违规",
+    "内容审核",
+)
+
+
+def _looks_like_moderation_block(text: str) -> bool:
+    """判断这段文本是否是服务端审核拦截返回的报错文案（而非模型正常回复）"""
+    if not text:
+        return False
+    lower = text.lower().strip()
+    return any(marker.lower() in lower for marker in CONTENT_MODERATION_MARKERS)
+
 
 class LLMProvider(LLMProviderBase):
     def __init__(self, config):
@@ -115,10 +136,16 @@ class LLMProvider(LLMProviderBase):
         responses = self.client.chat.completions.create(**request_params)
 
         is_active = True
-        try:            
+        try:
             for chunk in responses:
                 try:
-                    delta = chunk.choices[0].delta if getattr(chunk, "choices", None) else None
+                    choice = chunk.choices[0] if getattr(chunk, "choices", None) else None
+                    # 服务端内容审核拦截：finish_reason 为 content_filter，或把报错文案塞进 content
+                    finish_reason = getattr(choice, "finish_reason", None) if choice else None
+                    if finish_reason == "content_filter":
+                        logger.bind(tag=TAG).warning("大模型返回 content_filter，内容被服务端审核拦截")
+                        continue
+                    delta = choice.delta if choice else None
                     content = getattr(delta, "content", "") if delta else ""
                 except IndexError:
                     content = ""
@@ -129,7 +156,11 @@ class LLMProvider(LLMProviderBase):
                     if "</think>" in content:
                         is_active = True
                         content = content.split("</think>")[-1]
-                    if is_active:
+                    # 过滤服务端审核文案，避免报错文本被当作正常回复念出去
+                    if _looks_like_moderation_block(content):
+                        logger.bind(tag=TAG).warning(f"检测到内容审核拦截文案，已丢弃：{content}")
+                        content = ""
+                    if is_active and content:
                         yield content
         finally:
             responses.close()
@@ -163,8 +194,19 @@ class LLMProvider(LLMProviderBase):
         try:
             for chunk in stream:
                 if getattr(chunk, "choices", None):
-                    delta = chunk.choices[0].delta
+                    choice = chunk.choices[0]
+                    # 服务端内容审核拦截
+                    finish_reason = getattr(choice, "finish_reason", None)
+                    if finish_reason == "content_filter":
+                        logger.bind(tag=TAG).warning("大模型返回 content_filter，内容被服务端审核拦截")
+                        yield "", None
+                        continue
+                    delta = choice.delta
                     content = getattr(delta, "content", "")
+                    # 过滤服务端审核文案
+                    if _looks_like_moderation_block(content):
+                        logger.bind(tag=TAG).warning(f"检测到内容审核拦截文案，已丢弃：{content}")
+                        content = ""
                     tool_calls = getattr(delta, "tool_calls", None)
                     yield content, tool_calls
                 elif isinstance(getattr(chunk, "usage", None), CompletionUsage):

@@ -5,6 +5,17 @@ const { execFile } = require('child_process')
 
 const CODEX_PETS_DIR = path.join(os.homedir(), '.codex', 'pets')
 const BUILTIN_PETS_DIR = path.join(__dirname, 'renderer', 'assets', 'pets')
+const DEFAULT_CELL_WIDTH = 192
+const DEFAULT_CELL_HEIGHT = 208
+
+function positiveInteger(value, fallback) {
+  return Number.isInteger(value) && value > 0 ? value : fallback
+}
+
+function normalizeSupportedActions(value) {
+  if (!Array.isArray(value)) return null
+  return [...new Set(value.filter(action => typeof action === 'string' && action.trim()).map(action => action.trim()))]
+}
 
 function isSafePetId(petId) {
   return (
@@ -43,7 +54,11 @@ function readPetManifestDirectory(petDir, folderName) {
       folderName,
       displayName: typeof manifest.displayName === 'string' ? manifest.displayName : id,
       description: typeof manifest.description === 'string' ? manifest.description : '',
-      spritesheetPath
+      spritesheetPath,
+      animationVersion: positiveInteger(manifest.animationVersion, 1),
+      cellWidth: positiveInteger(manifest.cellWidth, DEFAULT_CELL_WIDTH),
+      cellHeight: positiveInteger(manifest.cellHeight, DEFAULT_CELL_HEIGHT),
+      supportedActions: normalizeSupportedActions(manifest.supportedActions)
     }
   } catch (error) {
     return null
@@ -123,7 +138,11 @@ function getPetSpritesheetDataUrl(petsRoot = CODEX_PETS_DIR, petId, builtInPetsR
   return {
     id: pet.id,
     mimeType,
-    dataUrl: `data:${mimeType};base64,${data}`
+    dataUrl: `data:${mimeType};base64,${data}`,
+    animationVersion: pet.animationVersion,
+    cellWidth: pet.cellWidth,
+    cellHeight: pet.cellHeight,
+    supportedActions: pet.supportedActions
   }
 }
 

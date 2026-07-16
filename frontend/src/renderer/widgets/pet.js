@@ -5,7 +5,11 @@ import {
   getDragActionFromMovement,
   getFrameDuration,
   getFrameSource,
-  pickAmbientAction
+  getSupportedActions,
+  pickAmbientAction,
+  pickAmbientActionByContext,
+  resolvePetAction,
+  V1_ACTIONS
 } from './petAnimations.mjs'
 import {
   getDueReminderEvents,
@@ -44,12 +48,21 @@ let chatTimer = null
 let bubbleTimeout = null
 let frameIndex = 0
 let currentAnimation = 'idle'
+let currentSemanticAction = 'idle'
+let currentActionRole = 'base'
+let baseAction = 'idle'
+let supportedActions = new Set(V1_ACTIONS)
 let currentPetId = null
 let lastAmbientAction = null
 let lastDragAction = null
 let lastPetChatLine = null
 let pendingReminderEvent = null
 let isFocusing = false
+let isDragging = false
+let idleStateTimer = null
+let lastInteractionAt = Date.now()
+const persistentEmotes = new Map()
+const IDLE_SLEEP_DELAY_MS = 10 * 60 * 1000
 let reminderState = {
   lastHourlyKey: null,
   lastWaterAt: null,
@@ -101,10 +114,9 @@ function scheduleNextFrame() {
   const duration = getFrameDuration(currentAnimation, frameIndex)
   animTimer = setTimeout(() => {
     const animation = getAnimation(currentAnimation)
-    // If focusing, loop current animation. Otherwise revert to idle after non-idle animation finishes.
-    if (currentAnimation !== 'idle' && !isFocusing && frameIndex >= animation.frames - 1) {
-      currentAnimation = 'idle'
-      frameIndex = 0
+    if (currentActionRole === 'transient' && frameIndex >= animation.frames - 1) {
+      finishCurrentAction()
+      return
     } else {
       frameIndex = (frameIndex + 1) % animation.frames
     }
@@ -118,11 +130,91 @@ function randomActionDelay() {
 }
 
 function playAction(actionName) {
-  if (!spriteImg || !getAnimation(actionName)) return
-  currentAnimation = actionName
+  if (!spriteImg) return
+  startAction(actionName, 'transient')
+}
+
+function startAction(actionName, role) {
+  clearActionEmotes(currentSemanticAction)
+  currentSemanticAction = actionName
+  currentAnimation = resolvePetAction(actionName, supportedActions)
+  currentActionRole = role
   frameIndex = 0
+  showActionEmotes(actionName)
   drawPetFrame()
   scheduleNextFrame()
+}
+
+function finishCurrentAction() {
+  clearActionEmotes(currentSemanticAction)
+  startAction(baseAction, 'base')
+}
+
+function setBaseAction(actionName) {
+  baseAction = actionName
+  startAction(actionName, 'base')
+}
+
+function markInteraction() {
+  lastInteractionAt = Date.now()
+  if (baseAction === 'sleep') setBaseAction(isFocusing ? 'study' : 'idle')
+}
+
+function evaluateIdleState(now = Date.now()) {
+  if (baseAction === 'sleep' || isFocusing || isDragging || pendingReminderEvent) return
+  if (now - lastInteractionAt >= IDLE_SLEEP_DELAY_MS) setBaseAction('sleep')
+}
+
+function showEmote(symbol, options = {}) {
+  const layer = document.getElementById('pet-emote-layer')
+  if (!layer) return null
+  const element = document.createElement('span')
+  element.className = `pet-emote ${options.variant || 'float'}`
+  element.textContent = symbol
+  element.style.setProperty('--emote-x', `${options.x ?? Math.round(Math.random() * 44 - 22)}px`)
+  layer.appendChild(element)
+  const remove = () => element.remove()
+  element.addEventListener('animationend', remove, { once: true })
+  setTimeout(remove, options.duration || 2400)
+  return element
+}
+
+function showEmoteBurst(symbols) {
+  symbols.forEach((symbol, index) => {
+    setTimeout(() => showEmote(symbol, { x: -28 + index * 18 }), index * 80)
+  })
+}
+
+function showPersistentEmote(key, symbol) {
+  if (persistentEmotes.has(key)) return
+  const layer = document.getElementById('pet-emote-layer')
+  if (!layer) return
+  const element = document.createElement('span')
+  element.className = 'pet-emote persistent'
+  element.textContent = symbol
+  element.dataset.emoteKey = key
+  layer.appendChild(element)
+  persistentEmotes.set(key, element)
+}
+
+function clearPersistentEmote(key) {
+  persistentEmotes.get(key)?.remove()
+  persistentEmotes.delete(key)
+}
+
+function showActionEmotes(action) {
+  if (action === 'sleep' || action === 'yawn') showPersistentEmote(action, 'Zzz')
+  if (action === 'dance') showPersistentEmote(action, '♪')
+  if (action === 'cheer') showEmoteBurst(['✨', '★', '✨'])
+  if (action === 'stomp') showEmoteBurst(['💢', '!'])
+}
+
+function clearActionEmotes(action) {
+  clearPersistentEmote(action)
+}
+
+function maybeCelebrateHappiness(previous, next) {
+  if (previous <= 80 && next > 80) showEmoteBurst(['♡', '♥', '✨', '♡'])
 }
 
 function setBubbleActionsVisible(visible) {
@@ -136,7 +228,10 @@ function hideBubble() {
     clearTimeout(bubbleTimeout)
     bubbleTimeout = null
   }
-  if (bubble) bubble.classList.add('hidden')
+  if (bubble) {
+    bubble.classList.add('hidden')
+    bubble.classList.remove('thinking')
+  }
   setBubbleActionsVisible(false)
   pendingReminderEvent = null
 }
@@ -146,15 +241,121 @@ function finishPendingReminder(result) {
     hideBubble()
     return
   }
+  const reminderType = pendingReminderEvent.type
   const config = getConfigFn()
   const event = createReminderResponseEvent(pendingReminderEvent, result)
   appendActivityLog(config, event)
   
   // Update happiness
+  const previousHappiness = config.happiness
   config.happiness = calculateHappiness(config.happiness, event)
+  maybeCelebrateHappiness(previousHappiness, config.happiness)
   
   saveConfigFn()
   hideBubble()
+  markInteraction()
+  if (result === 'done') {
+    const doneAction = reminderType === 'water' ? 'nod' : reminderType === 'sedentary' ? 'stretch' : null
+    if (doneAction) playAction(doneAction)
+  }
+}
+
+// 视口安全边距:气泡各边距屏幕边缘至少保留这么多像素
+const BUBBLE_VIEWPORT_MARGIN = 8
+// 气泡与宠子的间距(与 CSS 中 margin 保持一致)
+const BUBBLE_GAP = 16
+// 候选方向优先级:默认向上,溢出时按 右 → 左 → 下 依次尝试
+const BUBBLE_DIRECTIONS = ['top', 'right', 'left', 'bottom']
+const BUBBLE_POS_CLASSES = ['bubble-pos-top', 'bubble-pos-right', 'bubble-pos-left', 'bubble-pos-bottom']
+
+// 预测气泡在某方向渲染时的视口矩形(left/top/right/bottom)
+// petRect: 宠物 widget 的视口矩形;bw/bh: 气泡宽高
+function predictBubbleRect(direction, petRect, bw, bh) {
+  const gap = BUBBLE_GAP
+  switch (direction) {
+    case 'top': {
+      // 向上生长、水平居中
+      const right = petRect.left + petRect.width / 2 + bw / 2
+      const left = petRect.left + petRect.width / 2 - bw / 2
+      const bottom = petRect.top - gap
+      const top = bottom - bh
+      return { left, top, right, bottom }
+    }
+    case 'bottom': {
+      const right = petRect.left + petRect.width / 2 + bw / 2
+      const left = petRect.left + petRect.width / 2 - bw / 2
+      const top = petRect.bottom + gap
+      const bottom = top + bh
+      return { left, top, right, bottom }
+    }
+    case 'right': {
+      const left = petRect.right + gap
+      const right = left + bw
+      const top = petRect.top + petRect.height / 2 - bh / 2
+      const bottom = top + bh
+      return { left, top, right, bottom }
+    }
+    case 'left': {
+      const right = petRect.left - gap
+      const left = right - bw
+      const top = petRect.top + petRect.height / 2 - bh / 2
+      const bottom = top + bh
+      return { left, top, right, bottom }
+    }
+  }
+}
+
+function isRectInViewport(r) {
+  const m = BUBBLE_VIEWPORT_MARGIN
+  return r.left >= m && r.right <= window.innerWidth - m &&
+    r.top >= m && r.bottom <= window.innerHeight - m
+}
+
+// 根据宠物在屏幕上的位置,把气泡放到一个能完整显示的方向。
+// 优先级:上(默认) → 右 → 左 → 下;都不够空间则钳制在视口内。
+function positionBubble() {
+  const bubble = document.getElementById('pet-bubble')
+  const pet = document.getElementById('widget-pet')
+  if (!bubble || !pet) return
+
+  // 清除上次的方向类与行内定位修正,回到默认(向上)
+  BUBBLE_POS_CLASSES.forEach(c => bubble.classList.remove(c))
+  bubble.style.top = ''
+  bubble.style.left = ''
+  bubble.style.right = ''
+  bubble.style.bottom = ''
+  bubble.style.transform = ''
+
+  // 强制布局,测量默认方向下的真实气泡尺寸 + 宠物矩形
+  const petRect = pet.getBoundingClientRect()
+  const bw = bubble.offsetWidth
+  const bh = bubble.offsetHeight
+
+  const m = BUBBLE_VIEWPORT_MARGIN
+  for (const dir of BUBBLE_DIRECTIONS) {
+    const r = predictBubbleRect(dir, petRect, bw, bh)
+    if (isRectInViewport(r)) {
+      bubble.classList.add('bubble-pos-' + dir)
+      return
+    }
+  }
+
+  // 极端情况:四方向都不够空间。保持默认向上,但钳制到视口内尽量完整显示。
+  bubble.classList.add('bubble-pos-top')
+  const defaultRect = predictBubbleRect('top', petRect, bw, bh)
+  // 若顶部溢出,用行内 top 把气泡顶部拉到安全边距(覆盖 CSS 的 bottom 锚定)
+  if (defaultRect.top < m) {
+    bubble.style.bottom = 'auto'
+    bubble.style.top = m + 'px'
+    // left 可能也溢出(气泡比宠物宽时),钳制水平
+    if (defaultRect.left < m) {
+      bubble.style.left = m + 'px'
+      bubble.style.transform = 'none'
+    } else if (defaultRect.right > window.innerWidth - m) {
+      bubble.style.left = (window.innerWidth - m - bw) + 'px'
+      bubble.style.transform = 'none'
+    }
+  }
 }
 
 function showBubble(text, options = {}) {
@@ -172,6 +373,8 @@ function showBubble(text, options = {}) {
   bubbleText.textContent = text
   bubble.classList.remove('hidden')
   setBubbleActionsVisible(Boolean(options.confirmable))
+  // 气泡显示后,根据宠物在屏幕上的位置自动选择一个不超出视口的方向
+  positionBubble()
   if (bubbleTimeout) clearTimeout(bubbleTimeout)
   // persistent:不设自动关闭计时(语音回复用——逐句更新气泡,
   // 等 TTS 真正说完后由调用方再触发一次带 duration 的 showBubble 收尾)
@@ -186,9 +389,11 @@ function showBubble(text, options = {}) {
 }
 
 function handleReminderEvent(event) {
+  markInteraction()
   const confirmable = event.type === 'water' || event.type === 'sedentary'
   pendingReminderEvent = confirmable ? event : null
   showBubble(event.text, { confirmable })
+  showEmote('!')
   playAction(event.action || 'waving')
   if (event.systemNotification) {
     window.alwaysHere.showNotification({
@@ -213,10 +418,53 @@ function checkReminders() {
 function startReminderLoop() {
   if (reminderTimer) clearInterval(reminderTimer)
   const now = new Date()
-  if (!reminderState.lastWaterAt) reminderState.lastWaterAt = now
-  if (!reminderState.lastSedentaryAt) reminderState.lastSedentaryAt = now
+  const config = getConfigFn()
+  const reminders = normalizeReminders(config.reminders)
+  // 启动时把"上次提醒时间"回拨一个间隔,使首次 checkReminders 立即触发,
+  // 避免每次重启都要干等 30~60 分钟才弹第一次提醒
+  if (!reminderState.lastWaterAt) {
+    reminderState.lastWaterAt = new Date(now.getTime() - reminders.water.intervalMinutes * 60 * 1000)
+  }
+  if (!reminderState.lastSedentaryAt) {
+    reminderState.lastSedentaryAt = new Date(now.getTime() - reminders.sedentary.intervalMinutes * 60 * 1000)
+  }
   checkReminders()
   reminderTimer = setInterval(checkReminders, 1000)
+}
+
+// 基于真实行为数据构建上下文 prompt,让 AI 生成的台词有针对性
+// 把喝水/久坐/加班/番茄钟/好感度/时间段 都拼进去
+function buildContextPrompt(config) {
+  const recent = summarizeRecentDays(config.activityLog || [], 7)
+  const happiness = config.happiness ?? 70
+  const mood = getMoodLevel(happiness)
+  const hour = new Date().getHours()
+  const period = hour < 6 ? '深夜' : hour < 11 ? '早上' : hour < 14 ? '中午' : hour < 18 ? '下午' : hour < 23 ? '晚上' : '深夜'
+
+  const ctx = []
+  if (recent.waterMissed > 0) ctx.push(`最近7天漏了${recent.waterMissed}次喝水提醒`)
+  if (recent.sedentaryMissed > 0) ctx.push(`久坐提醒被忽略${recent.sedentaryMissed}次`)
+  if (recent.totalOvertimeMs > 0) {
+    const hrs = Math.floor(recent.totalOvertimeMs / 3600000)
+    if (hrs > 0) ctx.push(`最近加班约${hrs}小时`)
+  }
+  if (recent.workStops > 0) ctx.push(`正常下班${recent.workStops}次`)
+  const moodDesc = mood === 'happy' ? '心情很好(好感度高,可以更活泼亲昵一点)' : mood === 'grumpy' ? '有点小委屈(用户最近没好好照顾自己,你有点担心又有点心疼,但还是温柔地关心他,语气软软的,绝对不要冷淡)' : '心情平稳'
+
+  // 便签待办统计(P1-2:定时提醒未完成的待办)
+  const noteTodos = countNoteTodos(config.noteText)
+  if (noteTodos > 0) ctx.push(`便签里还有${noteTodos}个待办没完成`)
+
+  const ctxText = ctx.length > 0 ? `\n[行为数据] ${ctx.join('、')}` : ''
+  return `你是桌面陪伴宠物,现在是${period}。${moodDesc}${ctxText}
+基于以上信息,主动跟用户说一句话(20字以内),自然不机械。如果有该关心的(如漏喝水/久坐/待办),优先关心;没有就轻松聊一句。`
+}
+
+// 统计便签里未完成的待办数(支持 - [ ] 格式)
+function countNoteTodos(noteText) {
+  if (!noteText || typeof noteText !== 'string') return 0
+  const matches = noteText.match(/- \[ \]/g)
+  return matches ? matches.length : 0
 }
 
 // 从写死台词池里挑一句(作为 AI 不可用时的回落)
@@ -258,7 +506,7 @@ async function showPetChat(options = {}) {
 
   // 语音已启用时,尝试走小智 AI
   if (config.voice?.enabled) {
-    const aiOk = await tryAiChat(options.aiPrompt)
+    const aiOk = await tryAiChat(options.aiPrompt || buildContextPrompt(config))
     if (aiOk) return
     // AI 不可用 → 回落本地台词(继续往下)
   }
@@ -287,7 +535,8 @@ async function tryAiChat(prompt) {
     // 等待 AI 回复期间给个思考提示 + 动画
     showBubble('🤔 想想说什么...', { duration: 5000 })
     if (currentAnimation === 'idle') playAction('review')
-    const text = prompt || '主动跟我说一句话,像桌面陪伴伙伴那样。'
+    // 引导小智主动开口;不传具体内容时,只给一个轻量提示,不强制指令式文案
+    const text = prompt || '跟我打个招呼吧'
     // 登记:这是发给小智的引导指令,服务端 detect 模式会把它当 stt 回显,
     // 但它不是真实用户发言,不应出现在前台气泡(petVoice.mjs 据此过滤)
     window.dispatchEvent(new CustomEvent('pet-voice-system-prompt', { detail: text }))
@@ -322,7 +571,10 @@ function scheduleAmbientAction(delay = randomActionDelay()) {
   if (actionTimer) clearTimeout(actionTimer)
   actionTimer = setTimeout(() => {
     if (currentAnimation === 'idle' && !isFocusing) {
-      lastAmbientAction = pickAmbientAction(lastAmbientAction)
+      lastAmbientAction = pickAmbientActionByContext({
+        happiness: getConfigFn().happiness,
+        lastAction: lastAmbientAction
+      })
       playAction(lastAmbientAction)
     }
     scheduleAmbientAction()
@@ -340,9 +592,9 @@ async function loadConfiguredPet() {
     const loadedImage = await loadImage(result.dataUrl)
     if (currentPetId !== result.id) return
     spriteImg = loadedImage
-    currentAnimation = 'idle'
-    frameIndex = 0
-    drawPetFrame()
+    supportedActions = getSupportedActions(result.supportedActions, loadedImage.height)
+    baseAction = 'idle'
+    startAction('idle', 'base')
   } catch (error) {
     console.warn('Failed to load pet:', error)
     spriteImg = null
@@ -368,8 +620,11 @@ export async function initPet(getConfig, saveConfig) {
   scheduleAmbientAction(4000)
   startReminderLoop()
   startPetChatLoop()
+  if (idleStateTimer) clearInterval(idleStateTimer)
+  idleStateTimer = setInterval(evaluateIdleState, 30000)
 
   window.addEventListener('pet-selection-changed', async () => {
+    markInteraction()
     await loadConfiguredPet()
   })
 
@@ -409,7 +664,18 @@ export async function initPet(getConfig, saveConfig) {
   // persistent 标记表示"小智正在说话,气泡逐句更新,不要自动关闭",
   // 由 petVoice 在 TTS 说完后补发一次带 duration 的回复来收尾(自动隐藏)。
   window.addEventListener('pet-voice-reply', (event) => {
+    const bubble = document.getElementById('pet-bubble')
     if (!event.detail?.text) return
+    // 思考中:工具调用期间(petVoice 检测到 "% <function>" stt 回显后发来 'think' 标记),
+    // 展示三点跳动的 loading 样式(详见 pet.css .thinking)。
+    // 后续 tts 的 sentence_start 会发普通 💬 消息,自动覆盖并清除 .thinking。
+    if (event.detail.text === 'think') {
+      if (bubble) bubble.classList.add('thinking')
+      showBubble('想想看...', { persistent: true })
+      return
+    }
+    // 非思考态消息:清除上一次可能残留的 thinking 样式
+    if (bubble) bubble.classList.remove('thinking')
     if (event.detail.persistent) {
       showBubble(event.detail.text, { persistent: true })
     } else {
@@ -422,26 +688,59 @@ export async function initPet(getConfig, saveConfig) {
     if (typeof event.detail === 'string') playAction(event.detail)
   })
 
+  window.addEventListener('pet-emote', (event) => {
+    if (typeof event.detail === 'string') showEmote(event.detail)
+  })
+
   window.addEventListener('pomodoro-start', () => {
+    markInteraction()
     isFocusing = true
-    playAction('review')
+    setBaseAction('study')
   })
 
   window.addEventListener('pomodoro-stop', () => {
     isFocusing = false
+    if (baseAction === 'study') setBaseAction('idle')
   })
 
   window.addEventListener('pomodoro-done', (event) => {
     const config = getConfigFn()
+    const previousHappiness = config.happiness
     config.happiness = calculateHappiness(config.happiness, { type: 'pomodoro-done' })
+    maybeCelebrateHappiness(previousHappiness, config.happiness)
     saveConfigFn()
+    setBaseAction('idle')
+    playAction('cheer')
+    // 番茄钟完成 → AI 生成个性化鼓励(基于今日完成数)
+    if (config.voice?.enabled) {
+      const recent = summarizeRecentDays(config.activityLog || [], 1)
+      const prompt = `用户刚完成了一个番茄钟(今日已完成约${recent.entries}条行为记录,好感度${config.happiness})。用桌面陪伴宠物的口吻,鼓励一句(15字以内),带点成就感。`
+      tryAiChat(prompt)
+    }
   })
 
   window.addEventListener('work-stop', (event) => {
+    markInteraction()
     // work-stop event detail contains the activity entry
     const config = getConfigFn()
+    const previousHappiness = config.happiness
     config.happiness = calculateHappiness(config.happiness, event.detail)
+    maybeCelebrateHappiness(previousHappiness, config.happiness)
     saveConfigFn()
+    // 下班 → AI 生成个性化播报(薪资/加班情况)
+    if (config.voice?.enabled) {
+      const w = config.wageman || {}
+      const recent = summarizeRecentDays(config.activityLog || [], 7)
+      const overtimeHrs = Math.floor(recent.totalOvertimeMs / 3600000)
+      let prompt = `用户刚下班了。`
+      if (w.monthlySalary && w.workDays) {
+        const daily = Math.round(Number(w.monthlySalary) / (Number(w.workDays) || 22))
+        prompt += `日薪约${daily}元。`
+      }
+      if (overtimeHrs > 0) prompt += `最近加班约${overtimeHrs}小时。`
+      prompt += `用桌面陪伴宠物的口吻,说一句下班播报(20字以内),可以提到收入或鼓励休息。`
+      tryAiChat(prompt)
+    }
   })
 
   const widget = document.getElementById('widget-pet')
@@ -456,28 +755,32 @@ export async function initPet(getConfig, saveConfig) {
   })
 
   widget.addEventListener('mouseenter', () => {
+    markInteraction()
     if (currentAnimation === 'idle') playAction('waving')
   })
 
   widget.addEventListener('click', () => {
+    markInteraction()
     // 若语音输入栏被隐藏(如刚按过 Esc),单击先把它唤回来,不挥手
     const voiceBar = document.getElementById('pet-voice-bar')
     if (voiceBar?.classList.contains('hidden')) {
       window.dispatchEvent(new CustomEvent('pet-voice-show-bar'))
       return
     }
-    // 小智正在说话时,点击打断它
-    window.dispatchEvent(new CustomEvent('pet-voice-interrupt'))
     // 单击只做挥手回应,不触发对话(避免频繁打扰/联网)
+    // 注:打断改为发送消息时触发(见 petVoice.mjs 的 sendText)
     if (currentAnimation === 'idle') playAction('waving')
   })
 
   widget.addEventListener('dblclick', () => {
-    const action = pickAmbientAction(currentAnimation)
+    markInteraction()
+    const action = (getConfigFn().happiness ?? 70) > 80 ? 'spin' : pickAmbientAction(currentSemanticAction)
     playAction(action)
   })
 
   widget.addEventListener('widget-drag', (event) => {
+    markInteraction()
+    isDragging = true
     const action = getDragActionFromMovement(
       event.detail?.deltaX || 0,
       event.detail?.totalDeltaX || 0
@@ -488,10 +791,9 @@ export async function initPet(getConfig, saveConfig) {
   })
 
   widget.addEventListener('widget-drag-end', () => {
+    markInteraction()
+    isDragging = false
     lastDragAction = null
-    currentAnimation = 'idle'
-    frameIndex = 0
-    drawPetFrame()
-    scheduleNextFrame()
+    startAction(baseAction, 'base')
   })
 }

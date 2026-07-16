@@ -82,6 +82,9 @@ test('getDueReminderEvents emits work reminders for clock-in, lunch, off-soon, a
   assert.equal(offSoonEvents[0].type, 'work-off-soon')
   assert.equal(endEvents[0].type, 'work-end')
   assert.equal(endEvents[0].systemNotification, true)
+  assert.equal(lunchEvents[0].action, 'yawn')
+  assert.equal(offSoonEvents[0].action, 'study')
+  assert.equal(endEvents[0].action, 'cheer')
 })
 
 test('getDueReminderEvents uses 9 to 5 as default work reminder times', async () => {

@@ -136,10 +136,10 @@ export function getDueReminderEvents(now, reminderInput, state, config) {
     if (clockIn !== null) {
       pushWorkEvent(events, now, state, reminders.work, 'work-start', clockIn, '到上班时间啦', 'running')
     }
-    pushWorkEvent(events, now, state, reminders.work, 'work-lunch', 12 * 60, '午间休息一下吧', 'waiting')
+    pushWorkEvent(events, now, state, reminders.work, 'work-lunch', 12 * 60, '午间休息一下吧', 'yawn')
     if (clockOut !== null) {
-      pushWorkEvent(events, now, state, reminders.work, 'work-off-soon', Math.max(0, clockOut - 10), '再坚持一下，快下班了', 'review')
-      pushWorkEvent(events, now, state, reminders.work, 'work-end', clockOut, '下班啦，辛苦了', 'waving')
+      pushWorkEvent(events, now, state, reminders.work, 'work-off-soon', Math.max(0, clockOut - 10), '再坚持一下，快下班了', 'study')
+      pushWorkEvent(events, now, state, reminders.work, 'work-end', clockOut, '下班啦，辛苦了', 'cheer')
     }
   }
 

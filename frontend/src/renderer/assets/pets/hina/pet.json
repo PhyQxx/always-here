@@ -2,5 +2,29 @@
   "id": "hina",
   "displayName": "Hina",
   "description": "A gentle white-eyed chibi ninja digital pet inspired by Hinata's shy calm presence.",
-  "spritesheetPath": "spritesheet.webp"
+  "spritesheetPath": "spritesheet.webp",
+  "animationVersion": 2,
+  "cellWidth": 192,
+  "cellHeight": 208,
+  "supportedActions": [
+    "idle",
+    "runningRight",
+    "runningLeft",
+    "waving",
+    "jumping",
+    "failed",
+    "waiting",
+    "running",
+    "review",
+    "dance",
+    "cheer",
+    "spin",
+    "sleep",
+    "yawn",
+    "stretch",
+    "nod",
+    "study",
+    "stomp",
+    "eat"
+  ]
 }

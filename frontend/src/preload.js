@@ -28,10 +28,7 @@ contextBridge.exposeInMainWorld('alwaysHere', {
   voiceSendText: (text) => ipcRenderer.invoke('voice-send-text', text),
   voiceAbort: () => ipcRenderer.invoke('voice-abort'),
   voiceStatus: () => ipcRenderer.invoke('voice-status'),
-  voiceStartListen: (mode) => ipcRenderer.invoke('voice-start-listen', mode),
-  voiceStopListen: () => ipcRenderer.invoke('voice-stop-listen'),
   voiceAsr: (wavBuffer) => ipcRenderer.invoke('voice-asr', wavBuffer),
-  voiceSendAudio: (frame) => ipcRenderer.invoke('voice-send-audio', frame),
   voiceReregisterShortcut: () => ipcRenderer.invoke('voice-reregister-shortcut'),
   // ── 看屏幕说话(视觉) ──
   visionLookAndSay: () => ipcRenderer.invoke('vision-look-and-say'),

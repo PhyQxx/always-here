@@ -48,7 +48,7 @@ const DEFAULT_CONFIG = {
   },
   petChat: {
     enabled: true,
-    intervalMinutes: 1,
+    intervalMinutes: 10,
     quietMode: false,
     tone: 'companion'
   },
@@ -360,9 +360,14 @@ let voiceCurrentConfig = null
 function normalizeVoiceConfig(input = {}) {
   const fallback = DEFAULT_CONFIG.voice
   const str = (v, f) => (typeof v === 'string' && v.trim() ? v.trim() : f)
+  // serverUrl 统一补尾斜杠,与渲染进程 normalizeWsUrl 行为一致
+  const normalizeWs = (v) => {
+    const s = str(v, fallback.serverUrl)
+    return s.endsWith('/') ? s : s + '/'
+  }
   return {
     enabled: typeof input.enabled === 'boolean' ? input.enabled : fallback.enabled,
-    serverUrl: str(input.serverUrl, fallback.serverUrl),
+    serverUrl: normalizeWs(input.serverUrl),
     deviceId: str(input.deviceId, ''),
     clientId: str(input.clientId, ''),
     token: typeof input.token === 'string' ? input.token.trim() : '',
@@ -508,13 +513,6 @@ function scheduleReconnect() {
   }, delay)
 }
 
-// voiceConnect 时重置手动断开标记
-function voiceConnectWithReconnect() {
-  voiceManualDisconnect = false
-  resetReconnect()
-  voiceConnect()
-}
-
 ipcMain.handle('voice-connect', async () => {
   const config = ensureVoiceDeviceIds(loadConfig())
   const voice = normalizeVoiceConfig(config.voice)
@@ -554,22 +552,6 @@ ipcMain.handle('voice-status', async () => {
   return { connected: Boolean(voiceClient && voiceClient.isConnected) }
 })
 // M5 起:渲染进程采集 PCM 后经此上行(由主进程编码,见 opusCodec.js)
-ipcMain.handle('voice-send-audio', async (_, frame) => {
-  if (!voiceClient) return { ok: false }
-  // frame 可能是 ArrayBuffer/TypedArray/number[];统一成 Buffer
-  const buf = Buffer.from(frame)
-  return { ok: voiceClient.sendAudio(buf) }
-})
-ipcMain.handle('voice-start-listen', async (_, mode = 'auto') => {
-  if (!voiceClient || !voiceClient.isConnected) voiceConnect()
-  if (!voiceClient) return { ok: false, error: '未连接' }
-  return { ok: voiceClient.startListen(mode) }
-})
-ipcMain.handle('voice-stop-listen', async () => {
-  if (!voiceClient) return { ok: false }
-  return { ok: voiceClient.stopListen() }
-})
-
 // M5:语音识别(前端直连 mimo ASR,绕过小智服务端 ASR 模块)
 // 渲染进程采集麦克风 PCM → 转 WAV → 经 IPC 传来 → 调 mimo ASR → 返回识别文字
 ipcMain.handle('voice-asr', async (_, wavBuffer) => {
