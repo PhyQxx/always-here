@@ -1,8 +1,10 @@
 // 桌面伙伴的语音/对话能力(接入小智 ESP32 服务端)
 //
-// M2 阶段:文字对话。提供伙伴气泡旁的输入框,用户打字 → 小智 detect 模式 →
-//         回复文字显示在气泡 + 情绪驱动伙伴动画。
-// M5 阶段:麦克风按钮接入真实语音(见 petVoiceCapture.mjs)。
+// 已实现:
+//  - 文字对话:伙伴气泡旁的输入框,用户打字 → 小智 detect 模式 →
+//    回复文字显示在气泡 + 情绪驱动伙伴动画。
+//  - 麦克风语音:getUserMedia 采集 → WAV → 小智 ASR → LLM → TTS 播放(见下方采集段)。
+//  - TTS 下行音频播放(Web Audio 排队 Float32 PCM)与情绪动画。
 //
 // 设计:
 //  - 不新建气泡 DOM,复用 pet.js 的 showBubble(经 pet-voice-reply 事件)。
@@ -11,12 +13,14 @@
 
 import { normalizeVoiceSettings } from './voiceSettings.mjs'
 import { emotionToAnimation, emotionToEmote, VOICE_PHASE_ANIMATION } from './voiceEmotion.mjs'
+import { normalizePrompt } from '../utils/textNormalize.mjs'
+import { PET_EVENTS } from '../utils/events.mjs'
 
 let getConfigFn = null
 let saveConfigFn = null
 let inputEl = null
 let micBtn = null
-let listening = false // 是否正在语音输入(M5)
+let listening = false // 是否正在语音输入
 let speaking = false // 小智是否正在说话
 let abortBtn = null // 说话时的"打断"按钮(复用气泡 action 区)
 let lastSpokenText = '' // 最近一句 TTS 文本,用于说完后补发气泡收尾
@@ -25,16 +29,6 @@ let bubbleDismissTimer = null // TTS 说完后延迟收尾气泡的计时器
 // 记录本端主动发给小智的"引导 prompt"(非真实用户发言)。
 // 小智 detect 模式会把注入文本当成用户语音回显 stt,这些内部指令不应出现在气泡里。
 const systemPrompts = new Set()
-// 服务端回显 stt 前会剥掉文本首尾的空白、标点(半角/全角)和 emoji:
-//   xiaozhi-server/.../textUtils.py:get_string_no_punctuation_or_emoji
-//   (经 send_stt_message 应用到每条回显的 stt)。
-// 注入小智的"内部 prompt"(看屏幕、主动搭话等)会走 detect 模式被原样回显为 stt。
-// 若登记/匹配时不镜像这个首尾剥离,结尾的 `。` 之类会让精确匹配失败,
-// 导致发给 AI 的指令被当作用户发言泄漏进气泡(显示成"🧑 你刚看到用户的屏幕:...")。
-const STT_EDGE_TRIM = /^[\s\u3000,，.。!！?？:：;；“”"‘’'()（）【】\[\]、\-－～]+|[\s\u3000,，.。!！?？:：;；“”"‘’'()（）【】\[\]、\-－～]+$/g
-function normalizePrompt(text) {
-  return (text || '').replace(STT_EDGE_TRIM, '').toLowerCase()
-}
 function markSystemPrompt(text) {
   const key = normalizePrompt(text)
   if (key) systemPrompts.add(key)
@@ -48,7 +42,7 @@ function consumeSystemPrompt(text) {
   return systemPrompts.delete(key)
 }
 
-// ── 音频播放(M4:小智 TTS 下行音频) ──
+// ── 音频播放(小智 TTS 下行音频) ──
 let audioCtx = null
 let nextPlayTime = 0 // 下一个块该播放的时间(保证连续)
 let speakingAnimTimer = null
@@ -141,11 +135,11 @@ function voiceSettings() {
 
 function setPetAnimation(action) {
   if (!action) return
-  window.dispatchEvent(new CustomEvent('pet-action', { detail: action }))
+  window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_ACTION, { detail: action }))
 }
 
 function showVoiceBubble(text, { confirmable = false, actions = null, persistent = false } = {}) {
-  window.dispatchEvent(new CustomEvent('pet-voice-reply', { detail: { text, confirmable, actions, persistent } }))
+  window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_VOICE_REPLY, { detail: { text, confirmable, actions, persistent } }))
 }
 
 // 处理来自主进程的下行事件
@@ -161,7 +155,7 @@ function handleVoiceEvent(event) {
       if (event.text) markSystemPrompt(event.text)
       break
     case 'stt':
-      // 显示识别到的用户语音文字(M5)或文字输入回显
+      // 显示识别到的用户语音文字或文字输入回显
       if (event.text) {
         // 工具调用回显(服务端 unified_tool_handler 发的 "% <function_name>",
         // 如 "% get_news_from_newsnow"):不在气泡里显示原始函数名,
@@ -181,7 +175,7 @@ function handleVoiceEvent(event) {
       // 情绪驱动伙伴动画
       setPetAnimation(emotionToAnimation(event.emotion))
       if (emotionToEmote(event.emotion)) {
-        window.dispatchEvent(new CustomEvent('pet-emote', { detail: emotionToEmote(event.emotion) }))
+        window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_EMOTE, { detail: emotionToEmote(event.emotion) }))
       }
       break
     case 'tts':
@@ -205,7 +199,7 @@ function handleVoiceEvent(event) {
       }
       break
     case 'audio-chunk':
-      // M4:播放小智 TTS 下行音频(Float32 PCM 24kHz)
+      // 播放小智 TTS 下行音频(Float32 PCM 24kHz)
       if (voiceSettings().autoPlayTTS) {
         playPcmChunk(event.samples, event.sampleRate)
       }
@@ -244,7 +238,7 @@ async function ensureConnected() {
   return false
 }
 
-// 发送文字(M2 核心)
+// 发送文字(对话核心:打字 → 小智 detect 模式)
 async function sendText(text) {
   const trimmed = (text || '').trim()
   if (!trimmed) return
@@ -337,7 +331,7 @@ function buildInputUI() {
   })
   inputEl.addEventListener('mousedown', (e) => e.stopPropagation())
 
-  // 麦克风按钮(M5 接入真实采集;M2 先占位提示)
+  // 麦克风按钮:切换录音状态
   micBtn.addEventListener('click', (e) => {
     e.stopPropagation()
     toggleMic()
@@ -369,7 +363,7 @@ function toggleVoiceBar() {
   else hideVoiceBar()
 }
 
-// 麦克风开关(M5 实现真实采集;此处先做连接 + 状态提示)
+// 麦克风开关:确保小智已连接后切换采集状态
 async function toggleMic() {
   if (!voiceSettings().enabled) {
     showVoiceBubble('⚠️ 请先在设置中开启语音功能')
@@ -382,12 +376,13 @@ async function toggleMic() {
   }
 }
 
-// ── 麦克风采集(M5:前端直连 mimo ASR) ──
-// 流程:getUserMedia 采集 → AudioContext + ScriptProcessor 取 PCM →
-//       转 WAV → IPC 送主进程 → mimo ASR → 识别文字 → 当作用户输入发给小智
+// ── 麦克风采集(前端采集 → 小智 ASR) ──
+// 流程:getUserMedia 采集 → AudioContext + AudioWorklet 取 PCM →
+//       转 WAV → IPC 送主进程 → 小智 ASR → 识别文字 → 当作用户输入发给小智
+// 注:已从已废弃的 createScriptProcessor 迁移到 AudioWorklet(音频线程采集,不阻塞主线程)。
 let micStream = null
 let micAudioCtx = null
-let micScriptNode = null
+let micWorkletNode = null
 let micPcmChunks = [] // 采集到的 Float32 样本
 
 async function startListening() {
@@ -403,17 +398,35 @@ async function startListening() {
   }
   micPcmChunks = []
   micAudioCtx = new AudioContext({ sampleRate: 16000 })
-  const source = micAudioCtx.createMediaStreamSource(micStream)
-  // ScriptProcessor 已废弃但最简单兼容;4096 样本缓冲
-  micScriptNode = micAudioCtx.createScriptProcessor(4096, 1, 1)
-  micScriptNode.onaudioprocess = (e) => {
-    if (!listening) return
-    // 拷贝一份(Float32),避免引用被复用
-    const ch = e.inputBuffer.getChannelData(0)
-    micPcmChunks.push(new Float32Array(ch))
+  // 加载采集 worklet(相对路径基于 index.html 所在目录)
+  try {
+    await micAudioCtx.audioWorklet.addModule('./widgets/petVoiceCaptureWorklet.js')
+  } catch (e) {
+    // 浏览器/Electron 较旧版本不支持 AudioWorklet 时,清理并提示
+    micStream.getTracks().forEach(t => t.stop())
+    micStream = null
+    try { micAudioCtx.close() } catch {}
+    micAudioCtx = null
+    showVoiceBubble('⚠️ 当前环境不支持语音采集')
+    return
   }
-  source.connect(micScriptNode)
-  micScriptNode.connect(micAudioCtx.destination)
+  const source = micAudioCtx.createMediaStreamSource(micStream)
+  // 1 进 1 出;输出必须连 destination 才能驱动 process() 回调(即使不消费输出)
+  micWorkletNode = new AudioWorkletNode(micAudioCtx, 'pet-voice-capture-processor', {
+    numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1
+  })
+  micWorkletNode.port.onmessage = (event) => {
+    if (!listening) return
+    // worklet 已拷贝,直接收集(event.data 是 Float32Array)
+    micPcmChunks.push(event.data)
+  }
+  source.connect(micWorkletNode)
+  micWorkletNode.connect(micAudioCtx.destination)
+
+  // 部分 AudioContext 需要显式 resume(自动播放策略)
+  if (micAudioCtx.state === 'suspended') {
+    try { await micAudioCtx.resume() } catch {}
+  }
 
   listening = true
   micBtn?.classList.add('listening')
@@ -425,8 +438,12 @@ async function stopListening() {
   listening = false
   micBtn?.classList.remove('listening')
 
-  // 清理采集资源
-  if (micScriptNode) { try { micScriptNode.disconnect() } catch {} micScriptNode = null }
+  // 通知 worklet 停止上报,再断开节点
+  if (micWorkletNode) {
+    try { micWorkletNode.port.postMessage('stop') } catch {}
+    try { micWorkletNode.disconnect() } catch {}
+    micWorkletNode = null
+  }
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null }
   const sampleRate = micAudioCtx?.sampleRate || 16000
   if (micAudioCtx) { try { micAudioCtx.close() } catch {} micAudioCtx = null }
@@ -436,7 +453,7 @@ async function stopListening() {
     return
   }
 
-  // 合并 PCM → 转 WAV → 送 mimo ASR
+  // 合并 PCM → 转 WAV → 送小智 ASR
   showVoiceBubble('🎼 识别中...', { persistent: true })
   setPetAnimation(VOICE_PHASE_ANIMATION.thinking)
   const wavBuffer = pcmToWav(micPcmChunks, sampleRate)
@@ -529,7 +546,7 @@ export async function initPetVoice(getConfig, saveConfig) {
   window.addEventListener('beforeunload', () => { if (listening) stopListening() })
 
   // 快捷键 / 托盘触发(复用现有 tray-command 路由)
-  window.addEventListener('tray-command', (event) => {
+  window.addEventListener(PET_EVENTS.TRAY_COMMAND, (event) => {
     const payload = event.detail
     const command = typeof payload === 'string' ? payload : payload?.type
     if (command === 'voice-toggle') handleVoiceToggle()
@@ -537,7 +554,7 @@ export async function initPetVoice(getConfig, saveConfig) {
   })
 
   // 点击伙伴时,若输入栏被隐藏则重新唤出(找回入口)
-  window.addEventListener('pet-voice-show-bar', () => {
+  window.addEventListener(PET_EVENTS.PET_VOICE_SHOW_BAR, () => {
     const bar = document.getElementById('pet-voice-bar')
     if (bar?.classList.contains('hidden')) showVoiceBar()
   })
@@ -546,13 +563,13 @@ export async function initPetVoice(getConfig, saveConfig) {
 
   // 登记本端发给小智的"引导 prompt"(如伙伴主动找话)。
   // 这类文本是发给 AI 的指令,detect 模式仍会回 stt,但不应在气泡里当作用户发言显示。
-  window.addEventListener('pet-voice-system-prompt', (event) => {
+  window.addEventListener(PET_EVENTS.PET_VOICE_SYSTEM_PROMPT, (event) => {
     const text = typeof event.detail === 'string' ? event.detail : event.detail?.text
     if (text) markSystemPrompt(text)
   })
 
   // 设置变更后刷新可见性
-  window.addEventListener('voice-settings-changed', () => {
+  window.addEventListener(PET_EVENTS.VOICE_SETTINGS_CHANGED, () => {
     applyVoiceBarVisibility()
   })
 }

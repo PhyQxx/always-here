@@ -1,3 +1,5 @@
+import { PET_EVENTS } from './events.mjs'
+
 let activeDrag = null
 let clickThroughState = true // current IPC state
 let hasFocus = false          // input/textarea is focused
@@ -16,6 +18,15 @@ function getCachedElements() {
     cachedActivityPanel = document.getElementById('activity-panel')
   }
   return { cachedWidgets, cachedSettingsPanel, cachedActivityPanel }
+}
+
+// widget 显隐/增删后清空缓存,下次 getCachedElements 重建。
+// 当前 widget 显隐靠切 .hidden class 实现(isOverWidget 已据此判断),
+// 但未来若动态增删 widget 节点,缓存列表会过期,这里提供显式失效入口。
+function invalidateWidgetCache() {
+  cachedWidgets = null
+  cachedSettingsPanel = null
+  cachedActivityPanel = null
 }
 
 function isOverWidget(x, y) {
@@ -82,6 +93,9 @@ export function initClickThrough() {
       hasFocus = false
     }
   })
+
+  // widget 显隐/增删后清空缓存,保证后续穿透命中检测基于最新 DOM
+  window.addEventListener(PET_EVENTS.WIDGETS_VISIBILITY_CHANGED, invalidateWidgetCache)
 }
 
 export function makeDraggable(el, widgetKey, config, saveConfig) {
@@ -117,7 +131,7 @@ document.addEventListener('mousemove', (e) => {
     activeDrag.config.widgets[activeDrag.widgetKey].x = x
     activeDrag.config.widgets[activeDrag.widgetKey].y = y
   }
-  activeDrag.el.dispatchEvent(new CustomEvent('widget-drag', {
+  activeDrag.el.dispatchEvent(new CustomEvent(PET_EVENTS.WIDGET_DRAG, {
     detail: {
       widgetKey: activeDrag.widgetKey,
       deltaX: movementX,
@@ -132,7 +146,7 @@ document.addEventListener('mouseup', () => {
   activeDrag.el.classList.remove('is-dragging')
   activeDrag.el.style.cursor = 'grab'
   if (activeDrag.hasMoved) activeDrag.saveConfig()
-  activeDrag.el.dispatchEvent(new CustomEvent('widget-drag-end', {
+  activeDrag.el.dispatchEvent(new CustomEvent(PET_EVENTS.WIDGET_DRAG_END, {
     detail: { widgetKey: activeDrag.widgetKey }
   }))
   activeDrag = null

@@ -1,4 +1,6 @@
 import { appendActivityLog } from '../utils/activityLog.mjs'
+import { showConfirm } from '../utils/ui.mjs'
+import { PET_EVENTS } from '../utils/events.mjs'
 
 let timerState = {
   running: false,
@@ -59,8 +61,8 @@ function updateTimerDisplay() {
 function handlePomodoroComplete() {
   timerState.running = false
   cancelAnimationFrame(timerState.rafId)
-  window.dispatchEvent(new CustomEvent('pomodoro-stop'))
-  
+  window.dispatchEvent(new CustomEvent(PET_EVENTS.POMODORO_STOP))
+
   const config = getConfigFn()
   const timerSettings = config.widgets.timer
 
@@ -72,7 +74,7 @@ function handlePomodoroComplete() {
       createdAt: new Date().toISOString()
     })
     saveConfigFn()
-    window.dispatchEvent(new CustomEvent('pomodoro-done'))
+    window.dispatchEvent(new CustomEvent(PET_EVENTS.POMODORO_DONE))
 
     window.alwaysHere.showNotification({
       title: '专注时间结束',
@@ -101,9 +103,9 @@ function handlePomodoroComplete() {
   updateTimerDisplay()
 }
 
-function toggleMode() {
+async function toggleMode() {
   if (timerState.running) {
-    if (!confirm('切换模式将停止当前计时，确定吗？')) return
+    if (!await showConfirm('切换模式将停止当前计时，确定吗？')) return
     timerState.running = false
     cancelAnimationFrame(timerState.rafId)
     const startBtn = document.getElementById('timer-start')
@@ -127,8 +129,8 @@ function resetTimer() {
   timerState.elapsed = 0
   timerState.laps = []
   cancelAnimationFrame(timerState.rafId)
-  window.dispatchEvent(new CustomEvent('pomodoro-stop'))
-  
+  window.dispatchEvent(new CustomEvent(PET_EVENTS.POMODORO_STOP))
+
   if (timerState.mode === 'pomodoro') {
     const timerSettings = getConfigFn().widgets.timer
     timerState.phase = 'work'
@@ -194,12 +196,12 @@ export function initTimer(getConfig, saveConfig) {
       updateTimerDisplay()
       
       if (timerState.mode === 'pomodoro' && timerState.phase === 'work') {
-        window.dispatchEvent(new CustomEvent('pomodoro-start'))
+        window.dispatchEvent(new CustomEvent(PET_EVENTS.POMODORO_START))
       }
     } else {
       timerState.running = false
       if (timerState.mode === 'pomodoro' && timerState.phase === 'work') {
-        window.dispatchEvent(new CustomEvent('pomodoro-stop'))
+        window.dispatchEvent(new CustomEvent(PET_EVENTS.POMODORO_STOP))
       }
       if (timerState.mode === 'stopwatch') {
         timerState.elapsed += performance.now() - timerState.startTime
@@ -212,11 +214,11 @@ export function initTimer(getConfig, saveConfig) {
     }
   })
 
-  actionBtn.addEventListener('click', (e) => {
+  actionBtn.addEventListener('click', async (e) => {
     e.stopPropagation()
     if (timerState.mode === 'stopwatch') {
       if (!timerState.running && timerState.elapsed === 0) return
-      const current = timerState.running 
+      const current = timerState.running
         ? timerState.elapsed + (performance.now() - timerState.startTime)
         : timerState.elapsed
       timerState.laps.push(current)
@@ -227,15 +229,15 @@ export function initTimer(getConfig, saveConfig) {
       lapsEl.prepend(item)
     } else {
       // Pomodoro Skip
-      if (confirm(`跳过当前的${timerState.phase === 'work' ? '专注' : '休息'}阶段？`)) {
+      if (await showConfirm(`跳过当前的${timerState.phase === 'work' ? '专注' : '休息'}阶段？`)) {
         handlePomodoroComplete()
       }
     }
   })
 
-  resetBtn.addEventListener('click', (e) => {
+  resetBtn.addEventListener('click', async (e) => {
     e.stopPropagation()
-    if (confirm('确定要重置吗？')) {
+    if (await showConfirm('确定要重置吗？')) {
       resetTimer()
     }
   })

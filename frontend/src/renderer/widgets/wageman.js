@@ -1,6 +1,7 @@
 import { appendActivityLog } from '../utils/activityLog.mjs'
 import { dayKey, getWagemanState } from './wagemanState.mjs'
 import { mergeWagemanConfig } from './wagemanDefaults.mjs'
+import { PET_EVENTS } from '../utils/events.mjs'
 
 let getConfigFn = null
 let saveConfigFn = null
@@ -133,7 +134,7 @@ export async function initWageman(getConfig, saveConfig) {
       label = `工作日 (${month + 1}月, 未含节假日)`
     }
     saveConfig()
-    window.dispatchEvent(new CustomEvent('wageman-workdays-autofilled', {
+    window.dispatchEvent(new CustomEvent(PET_EVENTS.WAGEMAN_WORKDAYS_AUTOFILLED, {
       detail: { workDays: wc.workDays, label }
     }))
   }
@@ -141,7 +142,7 @@ export async function initWageman(getConfig, saveConfig) {
   const stopBtn = document.getElementById('wageman-stop')
   const startBtn = document.getElementById('wageman-start')
 
-  window.addEventListener('wageman-settings-changed', () => {
+  window.addEventListener(PET_EVENTS.WAGEMAN_SETTINGS_CHANGED, () => {
     updateWageman()
   })
 
@@ -185,7 +186,7 @@ export async function initWageman(getConfig, saveConfig) {
     await saveConfig()
     updateWageman()
     
-    window.dispatchEvent(new CustomEvent('work-stop', { detail: entry }))
+    window.dispatchEvent(new CustomEvent(PET_EVENTS.WORK_STOP, { detail: entry }))
   })
 
   ;[stopBtn, startBtn].forEach(el => {

@@ -1,9 +1,16 @@
 let getConfigFn = null
 let saveConfigFn = null
 
+// 转义用户输入,防止粘贴含 <script>/<img onerror> 等内容时在 innerHTML 中执行
+function escapeHtml(str) {
+  const div = document.createElement('div')
+  div.textContent = str == null ? '' : String(str)
+  return div.innerHTML
+}
+
 function parseNoteToHtml(text) {
   if (!text) return '<div class="empty-note">点击输入内容...</div>'
-  
+
   const lines = text.split('\n')
   return lines.map((line, index) => {
     // Check for task list format: - [ ] or - [x]
@@ -11,7 +18,7 @@ function parseNoteToHtml(text) {
     if (taskMatch) {
       const indent = taskMatch[1]
       const checked = taskMatch[2].toLowerCase() === 'x'
-      const content = taskMatch[3]
+      const content = escapeHtml(taskMatch[3])
       return `
         <div class="task-item ${checked ? 'completed' : ''}" data-line="${index}" style="margin-left: ${indent.length * 8}px">
           <input type="checkbox" class="task-checkbox" ${checked ? 'checked' : ''}>
@@ -19,7 +26,7 @@ function parseNoteToHtml(text) {
         </div>
       `
     }
-    return `<div class="note-line">${line || '&nbsp;'}</div>`
+    return `<div class="note-line">${line ? escapeHtml(line) : '&nbsp;'}</div>`
   }).join('')
 }
 

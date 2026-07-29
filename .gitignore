@@ -32,6 +32,11 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# Security secrets
+# auth 盐文件(xiaozhi-server 派生 AES-GCM 密钥用),每个部署独立生成
+.auth_salt
+**/.auth_salt
+
 # Electron
 .electron-builder.env
 /package-lock.json

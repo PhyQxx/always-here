@@ -33,9 +33,13 @@ contextBridge.exposeInMainWorld('alwaysHere', {
   voiceReregisterShortcut: () => ipcRenderer.invoke('voice-reregister-shortcut'),
   getConversationHistory: (options) => ipcRenderer.invoke('conversation-history', options),
   summarizeConversation: (options) => ipcRenderer.invoke('conversation-summary', options),
+  clearConversationHistory: () => ipcRenderer.invoke('conversation-clear'),
+  generateWorkReport: (options) => ipcRenderer.invoke('work-report', options),
   // ── 看屏幕说话(视觉) ──
   visionLookAndSay: () => ipcRenderer.invoke('vision-look-and-say'),
   visionStartLoop: (seconds) => ipcRenderer.invoke('vision-start-loop', seconds),
   visionStopLoop: () => ipcRenderer.invoke('vision-stop-loop'),
+  getVisionHistory: (options) => ipcRenderer.invoke('vision-history', options),
+  clearVisionHistory: () => ipcRenderer.invoke('vision-clear'),
   onVoiceEvent: (callback) => ipcRenderer.on('voice-event', (_event, data) => callback(data))
 })

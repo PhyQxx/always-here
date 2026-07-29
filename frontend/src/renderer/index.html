@@ -272,6 +272,9 @@
         <div class="setting-row" data-settings-scope="wageman">
           <button type="button" id="activity-log-open-wageman" class="btn-block">查看打工记录</button>
         </div>
+        <div class="setting-row" data-settings-scope="wageman">
+          <button type="button" id="work-report-open" class="btn-block">生成工作汇报</button>
+        </div>
       </div>
 
       <!-- Partner voice settings: shown together with the Partner tab -->
@@ -355,6 +358,9 @@
         <div class="setting-row" data-settings-scope="pet">
           <button type="button" id="vision-look-now" class="btn-primary">看一眼屏幕</button>
           <span class="status-text" id="vision-status"></span>
+        </div>
+        <div class="setting-row" data-settings-scope="pet">
+          <button type="button" id="vision-history-open" class="btn-block">查看屏幕观察记录</button>
         </div>
       </div>
 
@@ -458,10 +464,59 @@
       </select>
       <span id="conversation-count" class="conversation-count"></span>
       <button type="button" id="conversation-summary-generate" class="btn-primary">AI 总结</button>
+      <button type="button" id="conversation-clear" class="btn-block">清空对话</button>
     </div>
     <div class="conversation-body">
       <div id="conversation-summary" class="conversation-ai-summary hidden"></div>
       <div id="conversation-list" class="conversation-list"></div>
+    </div>
+  </div>
+
+  <div id="work-report-panel" class="conversation-panel hidden">
+    <div class="conversation-panel-header">
+      <div>
+        <h3>工作汇报</h3>
+        <p>根据伙伴观察到的屏幕内容，整理日报或周报</p>
+      </div>
+      <button type="button" id="work-report-close">关闭</button>
+    </div>
+    <div class="conversation-toolbar">
+      <select id="work-report-range" aria-label="汇报时间范围">
+        <option value="1" selected>日报（今天）</option>
+        <option value="3">最近 3 天</option>
+        <option value="7">周报（最近 7 天）</option>
+        <option value="30">最近 30 天</option>
+      </select>
+      <span id="work-report-count" class="conversation-count"></span>
+      <button type="button" id="work-report-generate" class="btn-primary">生成汇报</button>
+      <button type="button" id="work-report-copy" class="btn-block hidden">复制</button>
+    </div>
+    <div class="conversation-body">
+      <div id="work-report-output" class="conversation-ai-summary hidden"></div>
+    </div>
+  </div>
+
+  <div id="vision-panel" class="conversation-panel hidden">
+    <div class="conversation-panel-header">
+      <div>
+        <h3>屏幕观察记录</h3>
+        <p>开启"看屏幕说话"后,伙伴对屏幕的观察会保存在本机。可随时查看或清空。</p>
+      </div>
+      <button type="button" id="vision-history-close">关闭</button>
+    </div>
+    <div class="conversation-toolbar">
+      <select id="vision-range" aria-label="观察时间范围">
+        <option value="1">今天</option>
+        <option value="7" selected>最近 7 天</option>
+        <option value="30">最近 30 天</option>
+        <option value="all">全部时间</option>
+      </select>
+      <span id="vision-count" class="conversation-count"></span>
+      <button type="button" id="vision-refresh" class="btn-block">刷新</button>
+      <button type="button" id="vision-clear" class="btn-block">清空记录</button>
+    </div>
+    <div class="conversation-body">
+      <div id="vision-list" class="conversation-list"></div>
     </div>
   </div>
 

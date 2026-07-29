@@ -98,6 +98,9 @@ function createXiaozhiClient({ voiceConfig, onEvent }) {
   function connect() {
     manualClosed = false
     helloReceived = false
+    // 单次连接内有效:hello 超时主动关闭时置位,避免 close 事件再 emit disconnected,
+    // 进而触发主进程重连 → 又超时的无效循环(重连逻辑已在 error 事件里触发,不会漏)。
+    let helloTimeoutClosed = false
     const url = buildUrl()
     try {
       ws = new WebSocket(url)
@@ -108,6 +111,7 @@ function createXiaozhiClient({ voiceConfig, onEvent }) {
 
     const helloTimer = setTimeout(() => {
       if (!helloReceived) {
+        helloTimeoutClosed = true
         emit({
           type: 'status',
           state: 'error',
@@ -147,7 +151,9 @@ function createXiaozhiClient({ voiceConfig, onEvent }) {
 
     ws.on('close', () => {
       clearTimeout(helloTimer)
-      if (!manualClosed) {
+      // hello 超时主动关闭:已 emit 过 error,且主进程会在 error 里安排重连,
+      // 这里不再重复 emit disconnected,避免错误状态下刷屏重连日志。
+      if (!manualClosed && !helloTimeoutClosed) {
         emit({ type: 'status', state: 'disconnected' })
       }
     })

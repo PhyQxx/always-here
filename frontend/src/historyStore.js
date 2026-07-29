@@ -105,7 +105,67 @@ function createHistoryStore(filePath, { maxBytes = DEFAULT_MAX_BYTES } = {}) {
     return records.slice(-safeLimit)
   }
 
-  return { append, findLatest, list, filePath }
+  // 列出历史文件(当前 + 归档),供 clear 遍历
+  function allHistoryFiles() {
+    if (!fs.existsSync(path.dirname(filePath))) return []
+    const archivePrefix = path.basename(archiveBase) + '.'
+    const files = fs.readdirSync(path.dirname(filePath))
+      .filter((name) => name.startsWith(archivePrefix) && name.endsWith('.jsonl'))
+      .sort((a, b) => archiveSortKey(a).localeCompare(archiveSortKey(b)))
+      .map((name) => path.join(path.dirname(filePath), name))
+    if (fs.existsSync(filePath)) files.push(filePath)
+    return files
+  }
+
+  // 清空历史。
+  // 不传 category:删除当前文件 + 所有归档(全量清空)。
+  // 传 category:保留其它 category 的记录,只删除匹配的行(需重写文件)。
+  // 返回删除的记录数。
+  function clear(category) {
+    const files = allHistoryFiles()
+    if (!files.length) return 0
+    if (category === undefined || category === null) {
+      // 全量清空:直接删除所有文件
+      let removed = 0
+      for (const f of files) {
+        if (!fs.existsSync(f)) continue
+        try {
+          removed += fs.readFileSync(f, 'utf8').split('\n').filter((l) => l.trim()).length
+        } catch { /* noop */ }
+        fs.rmSync(f, { force: true })
+      }
+      return removed
+    }
+    // 按 category 删除:重写每个文件,保留非匹配行;空文件删除
+    let removed = 0
+    for (const f of files) {
+      if (!fs.existsSync(f)) continue
+      const lines = fs.readFileSync(f, 'utf8').split('\n')
+      const kept = []
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const record = JSON.parse(line)
+          if (record.category === category) {
+            removed++
+          } else {
+            kept.push(line)
+          }
+        } catch {
+          // 损坏行保留,不误删
+          kept.push(line)
+        }
+      }
+      if (kept.length > 0) {
+        fs.writeFileSync(f, kept.join('\n') + '\n', 'utf8')
+      } else {
+        fs.rmSync(f, { force: true })
+      }
+    }
+    return removed
+  }
+
+  return { append, findLatest, list, clear, filePath }
 }
 
 module.exports = { createHistoryStore, DEFAULT_MAX_BYTES }

@@ -34,6 +34,7 @@ import {
 } from './petChatter.mjs'
 import { appendActivityLog } from '../utils/activityLog.mjs'
 import { summarizeRecentDays } from '../utils/activityStats.mjs'
+import { PET_EVENTS } from '../utils/events.mjs'
 
 const CANVAS_WIDTH = 130
 const CANVAS_HEIGHT = 150
@@ -539,7 +540,7 @@ async function tryAiChat(prompt) {
     const text = prompt || '跟我打个招呼吧'
     // 登记:这是发给小智的引导指令,服务端 detect 模式会把它当 stt 回显,
     // 但它不是真实用户发言,不应出现在前台气泡(petVoice.mjs 据此过滤)
-    window.dispatchEvent(new CustomEvent('pet-voice-system-prompt', { detail: text }))
+    window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_VOICE_SYSTEM_PROMPT, { detail: text }))
     const res = await window.alwaysHere.voiceSendSystemText(text)
     return Boolean(res?.ok)
   } catch {
@@ -623,23 +624,23 @@ export async function initPet(getConfig, saveConfig) {
   if (idleStateTimer) clearInterval(idleStateTimer)
   idleStateTimer = setInterval(evaluateIdleState, 30000)
 
-  window.addEventListener('pet-selection-changed', async () => {
+  window.addEventListener(PET_EVENTS.PET_SELECTION_CHANGED, async () => {
     markInteraction()
     await loadConfiguredPet()
   })
 
-  window.addEventListener('reminder-settings-changed', (event) => {
+  window.addEventListener(PET_EVENTS.REMINDER_SETTINGS_CHANGED, (event) => {
     const now = new Date()
     if (event.detail?.type === 'water') reminderState.lastWaterAt = now
     if (event.detail?.type === 'sedentary') reminderState.lastSedentaryAt = now
     checkReminders()
   })
 
-  window.addEventListener('pet-chat-settings-changed', () => {
+  window.addEventListener(PET_EVENTS.PET_CHAT_SETTINGS_CHANGED, () => {
     startPetChatLoop()
   })
 
-  window.addEventListener('tray-command', (event) => {
+  window.addEventListener(PET_EVENTS.TRAY_COMMAND, (event) => {
     const payload = event.detail
     const command = typeof payload === 'string' ? payload : payload.type
     if (command === 'pet-say-now') {
@@ -656,14 +657,14 @@ export async function initPet(getConfig, saveConfig) {
     }
   })
 
-  window.addEventListener('pet-reminder', (event) => {
+  window.addEventListener(PET_EVENTS.PET_REMINDER, (event) => {
     if (event.detail?.text) handleReminderEvent(event.detail)
   })
 
   // 小智对话回复气泡:复用同一气泡。
   // persistent 标记表示"小智正在说话,气泡逐句更新,不要自动关闭",
   // 由 petVoice 在 TTS 说完后补发一次带 duration 的回复来收尾(自动隐藏)。
-  window.addEventListener('pet-voice-reply', (event) => {
+  window.addEventListener(PET_EVENTS.PET_VOICE_REPLY, (event) => {
     const bubble = document.getElementById('pet-bubble')
     if (!event.detail?.text) return
     // 思考中:工具调用期间(petVoice 检测到 "% <function>" stt 回显后发来 'think' 标记),
@@ -684,26 +685,26 @@ export async function initPet(getConfig, saveConfig) {
     }
   })
 
-  window.addEventListener('pet-action', (event) => {
+  window.addEventListener(PET_EVENTS.PET_ACTION, (event) => {
     if (typeof event.detail === 'string') playAction(event.detail)
   })
 
-  window.addEventListener('pet-emote', (event) => {
+  window.addEventListener(PET_EVENTS.PET_EMOTE, (event) => {
     if (typeof event.detail === 'string') showEmote(event.detail)
   })
 
-  window.addEventListener('pomodoro-start', () => {
+  window.addEventListener(PET_EVENTS.POMODORO_START, () => {
     markInteraction()
     isFocusing = true
     setBaseAction('study')
   })
 
-  window.addEventListener('pomodoro-stop', () => {
+  window.addEventListener(PET_EVENTS.POMODORO_STOP, () => {
     isFocusing = false
     if (baseAction === 'study') setBaseAction('idle')
   })
 
-  window.addEventListener('pomodoro-done', (event) => {
+  window.addEventListener(PET_EVENTS.POMODORO_DONE, (event) => {
     const config = getConfigFn()
     const previousHappiness = config.happiness
     config.happiness = calculateHappiness(config.happiness, { type: 'pomodoro-done' })
@@ -719,7 +720,7 @@ export async function initPet(getConfig, saveConfig) {
     }
   })
 
-  window.addEventListener('work-stop', (event) => {
+  window.addEventListener(PET_EVENTS.WORK_STOP, (event) => {
     markInteraction()
     // work-stop event detail contains the activity entry
     const config = getConfigFn()
@@ -764,7 +765,7 @@ export async function initPet(getConfig, saveConfig) {
     // 若语音输入栏被隐藏(如刚按过 Esc),单击先把它唤回来,不挥手
     const voiceBar = document.getElementById('pet-voice-bar')
     if (voiceBar?.classList.contains('hidden')) {
-      window.dispatchEvent(new CustomEvent('pet-voice-show-bar'))
+      window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_VOICE_SHOW_BAR))
       return
     }
     // 单击只做挥手回应,不触发对话(避免频繁打扰/联网)
@@ -778,7 +779,7 @@ export async function initPet(getConfig, saveConfig) {
     playAction(action)
   })
 
-  widget.addEventListener('widget-drag', (event) => {
+  widget.addEventListener(PET_EVENTS.WIDGET_DRAG, (event) => {
     markInteraction()
     isDragging = true
     const action = getDragActionFromMovement(
@@ -790,7 +791,7 @@ export async function initPet(getConfig, saveConfig) {
     playAction(action)
   })
 
-  widget.addEventListener('widget-drag-end', () => {
+  widget.addEventListener(PET_EVENTS.WIDGET_DRAG_END, () => {
     markInteraction()
     isDragging = false
     lastDragAction = null

@@ -16,7 +16,10 @@ import {
 import { applyWidgetPositions, applyTheme } from './utils/config.js'
 import { PET_CHAT_TONES, normalizePetChatSettings } from './widgets/petChatter.mjs'
 import { normalizeVoiceSettings, normalizeVisionSettings } from './widgets/voiceSettings.mjs'
+import { normalizeReminders } from './widgets/petReminders.mjs'
 import { showToast, showConfirm } from './utils/ui.mjs'
+import { renderMarkdown } from './utils/markdown.mjs'
+import { PET_EVENTS } from './utils/events.mjs'
 
 export function initSettings(getConfig, saveConfig) {
   const panel = document.getElementById('settings-panel')
@@ -168,7 +171,7 @@ export function initSettings(getConfig, saveConfig) {
         config.petId = pet.id
         await saveConfig()
         if (petSelect) petSelect.value = pet.id
-        window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+        window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_SELECTION_CHANGED))
         renderPetManager()
       }
 
@@ -192,7 +195,7 @@ export function initSettings(getConfig, saveConfig) {
           if (config.petId === pet.id) {
             config.petId = 'hina'
             await saveConfig()
-            window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+            window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_SELECTION_CHANGED))
           }
           await refreshPetSelect(petSelect)
           renderPetManager()
@@ -243,7 +246,7 @@ export function initSettings(getConfig, saveConfig) {
       select.addEventListener('change', async () => {
         getConfig().petId = select.value
         await saveConfig()
-        window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+        window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_SELECTION_CHANGED))
         renderPetManager()
       })
     } catch (error) {
@@ -271,7 +274,7 @@ export function initSettings(getConfig, saveConfig) {
       render()
       await refreshPetSelect(petSelect)
       renderPetManager()
-      window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+      window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_SELECTION_CHANGED))
     })
   }
 
@@ -301,7 +304,7 @@ export function initSettings(getConfig, saveConfig) {
         await saveConfig()
         await refreshPetSelect(petSelect)
         renderPetManager()
-        window.dispatchEvent(new CustomEvent('pet-selection-changed'))
+        window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_SELECTION_CHANGED))
         statusEl.textContent = `已导入：${imported.displayName || imported.id}`
       } catch (error) {
         statusEl.textContent = error.message || '导入失败，请确认伙伴包是否完整。'
@@ -326,7 +329,7 @@ export function initSettings(getConfig, saveConfig) {
       ['work', 'systemNotification', 'reminder-work-notify', 'checked']
     ]
 
-    const reminders = ensureReminderConfig(getConfig())
+    const reminders = normalizeReminders(getConfig().reminders)
     bindings.forEach(([type, prop, id, field]) => {
       const el = document.getElementById(id)
       if (!el) return
@@ -338,7 +341,7 @@ export function initSettings(getConfig, saveConfig) {
         reminders[type][prop] = nextValue
         if (field === 'value') el.value = nextValue
         await saveConfig()
-        window.dispatchEvent(new CustomEvent('reminder-settings-changed', {
+        window.dispatchEvent(new CustomEvent(PET_EVENTS.REMINDER_SETTINGS_CHANGED, {
           detail: { type, prop }
         }))
       })
@@ -377,7 +380,7 @@ export function initSettings(getConfig, saveConfig) {
       config.petChat = normalizePetChatSettings(nextSettings)
       render()
       await saveConfig()
-      window.dispatchEvent(new CustomEvent('pet-chat-settings-changed'))
+      window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_CHAT_SETTINGS_CHANGED))
     }
 
     render()
@@ -442,7 +445,7 @@ export function initSettings(getConfig, saveConfig) {
       render()
       await saveConfig()
       // 通知语音模块刷新可见性
-      window.dispatchEvent(new CustomEvent('voice-settings-changed'))
+      window.dispatchEvent(new CustomEvent(PET_EVENTS.VOICE_SETTINGS_CHANGED))
     }
 
     render()
@@ -562,6 +565,8 @@ export function initSettings(getConfig, saveConfig) {
     const listEl = document.getElementById('conversation-list')
     const summaryBtn = document.getElementById('conversation-summary-generate')
     const summaryEl = document.getElementById('conversation-summary')
+    // 总结区与对话列表共同的滚动容器(总结区在顶部,生成后需滚动到可见)
+    const bodyEl = summaryEl?.parentElement
     if (!openBtn || !closeBtn || !conversationPanel || !rangeEl || !listEl || !summaryBtn || !summaryEl) return
 
     function formatConversationTime(timestamp) {
@@ -600,7 +605,7 @@ export function initSettings(getConfig, saveConfig) {
     async function loadEntries({ resetSummary = false } = {}) {
       if (resetSummary) {
         summaryEl.classList.add('hidden')
-        summaryEl.classList.remove('is-error')
+        summaryEl.classList.remove('is-error', 'md-body')
         summaryEl.textContent = ''
       }
       listEl.innerHTML = '<div class="conversation-empty">正在读取对话…</div>'
@@ -620,28 +625,224 @@ export function initSettings(getConfig, saveConfig) {
     })
     closeBtn.addEventListener('click', () => conversationPanel.classList.add('hidden'))
     rangeEl.addEventListener('change', () => loadEntries({ resetSummary: true }))
+
+    // 清空对话历史:确认后删除,并刷新列表
+    const clearBtn = document.getElementById('conversation-clear')
+    clearBtn?.addEventListener('click', async () => {
+      if (!await showConfirm('确定清空全部对话历史吗？此操作不可恢复。')) return
+      clearBtn.disabled = true
+      const result = await window.alwaysHere.clearConversationHistory()
+      clearBtn.disabled = false
+      if (!result?.ok) {
+        showToast(result?.error || '清空失败', 'error')
+        return
+      }
+      showToast(`已清空 ${result.removed || 0} 条对话`, 'success')
+      await loadEntries({ resetSummary: true })
+    })
+  }
+
+  // 屏幕观察记录面板:查看 / 刷新 / 清空(隐私敏感数据,用户可管)
+  function initVisionPanel() {
+    const openBtn = document.getElementById('vision-history-open')
+    const closeBtn = document.getElementById('vision-history-close')
+    const panel = document.getElementById('vision-panel')
+    const rangeEl = document.getElementById('vision-range')
+    const countEl = document.getElementById('vision-count')
+    const listEl = document.getElementById('vision-list')
+    const refreshBtn = document.getElementById('vision-refresh')
+    const clearBtn = document.getElementById('vision-clear')
+    if (!closeBtn || !panel || !rangeEl || !listEl) return
+
+    function formatTime(timestamp) {
+      const date = new Date(timestamp)
+      if (Number.isNaN(date.getTime())) return ''
+      return new Intl.DateTimeFormat('zh-CN', {
+        month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+      }).format(date)
+    }
+
+    function renderEntries(entries) {
+      listEl.replaceChildren()
+      if (countEl) countEl.textContent = `${entries.length} 条观察`
+      if (!entries.length) {
+        const empty = document.createElement('div')
+        empty.className = 'conversation-empty'
+        empty.textContent = '这段时间没有屏幕观察记录。'
+        listEl.appendChild(empty)
+        return
+      }
+      // 倒序展示(最新在最上),便于查看最近的观察
+      for (const entry of [...entries].reverse()) {
+        const item = document.createElement('article')
+        item.className = 'conversation-message assistant'
+        const meta = document.createElement('div')
+        meta.className = 'conversation-message-meta'
+        const source = entry.source ? ` · ${entry.source}` : ''
+        meta.textContent = `${formatTime(entry.timestamp)}${source}`
+        const text = document.createElement('div')
+        text.className = 'conversation-message-text'
+        text.textContent = entry.text
+        item.append(meta, text)
+        listEl.appendChild(item)
+      }
+    }
+
+    async function loadEntries() {
+      listEl.innerHTML = '<div class="conversation-empty">正在读取屏幕观察记录…</div>'
+      const result = await window.alwaysHere.getVisionHistory({ days: rangeEl.value })
+      if (!result?.ok) {
+        renderEntries([])
+        showToast(result?.error || '读取屏幕观察记录失败', 'error')
+        return
+      }
+      renderEntries(result.entries || [])
+    }
+
+    openBtn?.addEventListener('click', async () => {
+      panel.classList.remove('hidden')
+      window.alwaysHere.setClickThrough(false)
+      await loadEntries()
+    })
+    closeBtn.addEventListener('click', () => panel.classList.add('hidden'))
+    rangeEl.addEventListener('change', loadEntries)
+    refreshBtn?.addEventListener('click', loadEntries)
+    clearBtn?.addEventListener('click', async () => {
+      if (!await showConfirm('确定清空全部屏幕观察记录吗？此操作不可恢复。')) return
+      clearBtn.disabled = true
+      const result = await window.alwaysHere.clearVisionHistory()
+      clearBtn.disabled = false
+      if (!result?.ok) {
+        showToast(result?.error || '清空失败', 'error')
+        return
+      }
+      showToast(`已清空 ${result.removed || 0} 条观察记录`, 'success')
+      await loadEntries()
+    })
     summaryBtn.addEventListener('click', async () => {
       const originalText = summaryBtn.textContent
       summaryBtn.disabled = true
       summaryBtn.textContent = '总结中…'
-      summaryEl.classList.remove('hidden', 'is-error')
+      summaryEl.classList.remove('hidden', 'is-error', 'md-body')
       summaryEl.textContent = '伙伴正在整理这段对话…'
+      // 总结区在列表顶部,先滚动到顶部让用户看到"总结中"状态
+      bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
       try {
         const result = await window.alwaysHere.summarizeConversation({ days: rangeEl.value })
         if (!result?.ok) throw new Error(result?.error || 'AI 总结失败')
         summaryEl.classList.remove('is-error')
-        summaryEl.textContent = result.text
+        // 渲染 Markdown(加 md-body 取消 pre-wrap)
+        summaryEl.classList.add('md-body')
+        summaryEl.innerHTML = renderMarkdown(result.text)
+        // 生成完毕后再次确保滚动到总结区(等待时间可能让用户离开了顶部)
+        bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
       } catch (error) {
         // 在面板内直接展示错误(顶部 toast 可能被本面板遮挡),便于用户看到原因
+        summaryEl.classList.remove('md-body')
         summaryEl.classList.remove('hidden')
         summaryEl.classList.add('is-error')
         summaryEl.textContent = error.message || 'AI 总结失败'
+        bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
         showToast(error.message || 'AI 总结失败', 'error')
       } finally {
         summaryBtn.disabled = false
         summaryBtn.textContent = originalText
       }
     })
+  }
+
+  function initWorkReportPanel() {
+    const openBtn = document.getElementById('work-report-open')
+    const closeBtn = document.getElementById('work-report-close')
+    const panel = document.getElementById('work-report-panel')
+    const rangeEl = document.getElementById('work-report-range')
+    const countEl = document.getElementById('work-report-count')
+    const generateBtn = document.getElementById('work-report-generate')
+    const copyBtn = document.getElementById('work-report-copy')
+    const outputEl = document.getElementById('work-report-output')
+    const bodyEl = outputEl?.parentElement
+    if (!openBtn || !closeBtn || !panel || !rangeEl || !generateBtn || !outputEl) return
+
+    // 记录最近一次生成的原始 Markdown 文本,供"复制"使用(渲染后会变成 HTML)
+    let lastReportText = ''
+
+    function resetOutput() {
+      outputEl.classList.add('hidden', 'is-error')
+      outputEl.classList.remove('md-body')
+      outputEl.textContent = ''
+      lastReportText = ''
+      if (copyBtn) copyBtn.classList.add('hidden')
+      if (countEl) countEl.textContent = ''
+    }
+
+    openBtn.addEventListener('click', () => {
+      panel.classList.remove('hidden')
+      window.alwaysHere.setClickThrough(false)
+    })
+    closeBtn.addEventListener('click', () => panel.classList.add('hidden'))
+    rangeEl.addEventListener('change', resetOutput)
+
+    generateBtn.addEventListener('click', async () => {
+      const originalText = generateBtn.textContent
+      generateBtn.disabled = true
+      generateBtn.textContent = '生成中…'
+      outputEl.classList.remove('hidden', 'is-error', 'md-body')
+      outputEl.textContent = '伙伴正在整理你的工作汇报…'
+      if (copyBtn) copyBtn.classList.add('hidden')
+      bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
+      try {
+        const result = await window.alwaysHere.generateWorkReport({ range: rangeEl.value })
+        if (!result?.ok) throw new Error(result?.error || '生成汇报失败')
+        lastReportText = result.text || ''
+        outputEl.classList.remove('is-error')
+        // 渲染 Markdown:加 md-body 取消 pre-wrap,用 innerHTML 注入转义后的安全 HTML
+        outputEl.classList.add('md-body')
+        outputEl.innerHTML = renderMarkdown(result.text)
+        if (countEl && result.count) countEl.textContent = `基于 ${result.count} 条记录`
+        if (copyBtn) copyBtn.classList.remove('hidden')
+        bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
+      } catch (error) {
+        outputEl.classList.remove('md-body')
+        outputEl.classList.remove('hidden')
+        outputEl.classList.add('is-error')
+        outputEl.textContent = error.message || '生成汇报失败'
+        bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
+        showToast(error.message || '生成汇报失败', 'error')
+      } finally {
+        generateBtn.disabled = false
+        generateBtn.textContent = originalText
+      }
+    })
+
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async () => {
+        // Electron 的 file:// 页面非安全上下文,navigator.clipboard 常不可用,需 execCommand 回退
+        const text = lastReportText || outputEl.textContent || ''
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text)
+          } else {
+            throw new Error('clipboard API 不可用')
+          }
+        } catch {
+          // 回退:临时 textarea + execCommand('copy'),在 Electron 渲染进程稳定可用
+          try {
+            const ta = document.createElement('textarea')
+            ta.value = text
+            ta.style.position = 'fixed'
+            ta.style.opacity = '0'
+            document.body.appendChild(ta)
+            ta.select()
+            document.execCommand('copy')
+            document.body.removeChild(ta)
+          } catch {
+            showToast('复制失败，请手动选择文本', 'error')
+            return
+          }
+        }
+        showToast('已复制到剪贴板', 'success')
+      })
+    }
   }
 
   function initVisionSettings() {
@@ -680,7 +881,7 @@ export function initSettings(getConfig, saveConfig) {
       lookBtn.addEventListener('click', async () => {
         if (statusEl) statusEl.textContent = '正在看屏幕...'
         // 经托盘命令路由到 petVoice
-        window.dispatchEvent(new CustomEvent('tray-command', { detail: { type: 'vision-look' } }))
+        window.dispatchEvent(new CustomEvent(PET_EVENTS.TRAY_COMMAND, { detail: { type: 'vision-look' } }))
         setTimeout(() => { if (statusEl) statusEl.textContent = '' }, 3000)
       })
     }
@@ -708,7 +909,7 @@ export function initSettings(getConfig, saveConfig) {
       wc.monthlySalary = salaryInput.value
       wc.workDays = workDaysInput.value
       saveConfig()
-      window.dispatchEvent(new CustomEvent('wageman-settings-changed'))
+      window.dispatchEvent(new CustomEvent(PET_EVENTS.WAGEMAN_SETTINGS_CHANGED))
     }
 
     clockInInput.addEventListener('change', saveInputs)
@@ -720,7 +921,7 @@ export function initSettings(getConfig, saveConfig) {
       saveInputs()
     })
 
-    window.addEventListener('wageman-workdays-autofilled', (e) => {
+    window.addEventListener(PET_EVENTS.WAGEMAN_WORKDAYS_AUTOFILLED, (e) => {
       workDaysInput.value = e.detail.workDays
       if (workDaysLabel) workDaysLabel.textContent = e.detail.label
     })
@@ -857,12 +1058,13 @@ export function initSettings(getConfig, saveConfig) {
   initWagemanSettings()
   initVoiceSettings()
   initConversationPanel()
+  initWorkReportPanel()
   initVisionSettings()
 
   window.alwaysHere.onTrayCommand?.((command) => {
     const type = typeof command === 'string' ? command : command.type
     if (type === 'pet-say-now') {
-      window.dispatchEvent(new CustomEvent('tray-command', { detail: command }))
+      window.dispatchEvent(new CustomEvent(PET_EVENTS.TRAY_COMMAND, { detail: command }))
     }
     if (type === 'toggle-pet-quiet-mode') {
       petChatSettings?.toggleQuietMode()
@@ -871,10 +1073,10 @@ export function initSettings(getConfig, saveConfig) {
       activityPanel?.open()
     }
     if (type === 'voice-toggle') {
-      window.dispatchEvent(new CustomEvent('tray-command', { detail: command }))
+      window.dispatchEvent(new CustomEvent(PET_EVENTS.TRAY_COMMAND, { detail: command }))
     }
     if (type === 'vision-look') {
-      window.dispatchEvent(new CustomEvent('tray-command', { detail: command }))
+      window.dispatchEvent(new CustomEvent(PET_EVENTS.TRAY_COMMAND, { detail: command }))
     }
   })
 
@@ -994,18 +1196,4 @@ export function initSettings(getConfig, saveConfig) {
     segment.style.width = `${Math.round(ratio * 100)}%`
     return segment
   }
-}
-
-function ensureReminderConfig(config) {
-  if (!config.reminders) config.reminders = {}
-  const defaults = {
-    hourly: { enabled: true, systemNotification: false },
-    water: { enabled: true, intervalMinutes: 30, systemNotification: false },
-    sedentary: { enabled: true, intervalMinutes: 60, systemNotification: false },
-    work: { enabled: true, systemNotification: false }
-  }
-  for (const key in defaults) {
-    config.reminders[key] = { ...defaults[key], ...(config.reminders[key] || {}) }
-  }
-  return config.reminders
 }

@@ -21,8 +21,10 @@ class AuthToken:
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-        # 使用固定盐值（实际生产环境应使用随机盐）
-        salt = b"fixed_salt_placeholder"  # 生产环境应改为随机生成
+        # 盐值:优先从持久化文件读取(进程级随机生成),保证加解密一致;
+        # 可用环境变量 AUTH_SALT_PATH 覆盖路径。
+        # ⚠️ 切勿再用固定盐:固定盐会让 AES-GCM 密钥可被预测。
+        salt = self._load_or_create_salt()
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=length,
@@ -31,6 +33,25 @@ class AuthToken:
             backend=default_backend(),
         )
         return kdf.derive(self.secret_key)
+
+    def _load_or_create_salt(self) -> bytes:
+        """加载或生成随机盐,持久化到文件以便重启后能解密历史 token。"""
+        salt_path = os.environ.get("AUTH_SALT_PATH") or os.path.join(
+            os.path.dirname(__file__), ".auth_salt"
+        )
+        if os.path.exists(salt_path):
+            with open(salt_path, "rb") as f:
+                return f.read()
+        salt = os.urandom(32)
+        os.makedirs(os.path.dirname(salt_path) or ".", exist_ok=True)
+        with open(salt_path, "wb") as f:
+            f.write(salt)
+        try:
+            os.chmod(salt_path, 0o600)
+        except OSError:
+            # Windows 上 chmod 行为有限,忽略即可;文件本身仍受用户目录权限保护
+            pass
+        return salt
 
     def _encrypt_payload(self, payload: dict) -> str:
         """使用AES-GCM加密整个payload"""

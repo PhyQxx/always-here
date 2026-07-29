@@ -2,6 +2,8 @@ import { mergeWagemanConfig } from '../widgets/wagemanDefaults.mjs'
 import { normalizePetChatSettings } from '../widgets/petChatter.mjs'
 import { normalizeVoiceSettings } from '../widgets/voiceSettings.mjs'
 import { normalizeVisionSettings } from '../widgets/voiceSettings.mjs'
+import { normalizeReminders } from '../widgets/petReminders.mjs'
+import { PET_EVENTS } from './events.mjs'
 
 let config = null
 
@@ -13,18 +15,11 @@ const DEFAULT_WIDGETS = {
   wageman: { enabled: true, x: 600, y: 350 }
 }
 
-const DEFAULT_REMINDERS = {
-  hourly: { enabled: true, systemNotification: false },
-  water: { enabled: true, intervalMinutes: 30, systemNotification: false },
-  sedentary: { enabled: true, intervalMinutes: 60, systemNotification: false },
-  work: { enabled: true, systemNotification: false }
-}
-
 const CURRENT_CONFIG_VERSION = 1
 
 export async function initConfig() {
   config = await window.alwaysHere.getConfig()
-  
+
   migrateConfig(config)
 
   for (const key in DEFAULT_WIDGETS) {
@@ -33,7 +28,8 @@ export async function initConfig() {
   if (!config.theme) config.theme = 'dark'
   if (!config.petId) config.petId = 'hina'
   if (!config.petFolderPath) config.petFolderPath = ''
-  config.reminders = mergeReminders(config.reminders)
+  // 提醒默认值统一来自 petReminders.mjs 的 normalizeReminders(单一数据源)
+  config.reminders = normalizeReminders(config.reminders)
   config.petChat = normalizePetChatSettings(config.petChat)
   config.voice = normalizeVoiceSettings(config.voice)
   config.vision = normalizeVisionSettings(config.vision)
@@ -41,37 +37,32 @@ export async function initConfig() {
   if (config.happiness === undefined) config.happiness = 70
   if (!config.noteText) config.noteText = ''
   if (!Array.isArray(config.activityLog)) config.activityLog = []
-  
+
   if (config.configVersion !== CURRENT_CONFIG_VERSION) {
     config.configVersion = CURRENT_CONFIG_VERSION
     await saveConfig()
   }
-  
+
   return config
 }
 
-function migrateConfig(cfg) {
-  if (!cfg.configVersion) {
-    cfg.configVersion = 0
-  }
-  
-  // Example migration:
-  // if (cfg.configVersion < 1) {
-  //   // migrate from 0 to 1
-  //   cfg.configVersion = 1
-  // }
-}
+// 配置版本迁移:按 from→to 版本阶梯执行。
+// 当前无实际迁移项;新增字段时走 normalizeXxx 即可,无需改版本号。
+// 仅当字段重命名/结构重组时才在此追加 [from, to, fn] 条目并提升 CURRENT_CONFIG_VERSION。
+const MIGRATIONS = [
+  // 示例(未来 v1→v2):
+  // [1, 2, (cfg) => { cfg.xxx = cfg.legacyField; delete cfg.legacyField }]
+]
 
-function mergeReminders(reminders = {}) {
-  const merged = {}
-  for (const key in DEFAULT_REMINDERS) {
-    merged[key] = { ...DEFAULT_REMINDERS[key], ...(reminders[key] || {}) }
-    if ((key === 'water' || key === 'sedentary') && merged[key].intervalMinutes === undefined) {
-      merged[key].intervalMinutes = DEFAULT_REMINDERS[key].intervalMinutes
+function migrateConfig(cfg) {
+  if (typeof cfg.configVersion !== 'number') cfg.configVersion = 0
+  for (const [from, to, fn] of MIGRATIONS) {
+    if (cfg.configVersion >= to) continue
+    if (cfg.configVersion === from) {
+      fn(cfg)
+      cfg.configVersion = to
     }
-    delete merged[key].intervalSeconds
   }
-  return merged
 }
 
 export function getConfig() {
@@ -93,6 +84,8 @@ export function applyWidgetPositions() {
     const check = document.getElementById('setting-' + key)
     if (check) check.checked = w.enabled
   }
+  // 显隐变更后通知 drag.js 清空穿透命中检测缓存
+  window.dispatchEvent(new CustomEvent(PET_EVENTS.WIDGETS_VISIBILITY_CHANGED))
 }
 
 export function applyTheme() {

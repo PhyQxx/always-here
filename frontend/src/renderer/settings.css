@@ -911,6 +911,69 @@
   color: rgba(255, 200, 200, 0.95);
 }
 
+/* Markdown 渲染容器:取消 pre-wrap,让 <p>/<h*>/<ul> 等块级元素正常排版 */
+.conversation-ai-summary.md-body {
+  white-space: normal;
+}
+
+.conversation-ai-summary.md-body > :first-child {
+  margin-top: 0;
+}
+.conversation-ai-summary.md-body > :last-child {
+  margin-bottom: 0;
+}
+.conversation-ai-summary.md-body h1,
+.conversation-ai-summary.md-body h2,
+.conversation-ai-summary.md-body h3,
+.conversation-ai-summary.md-body h4 {
+  margin: 1.1em 0 0.5em;
+  line-height: 1.35;
+  font-weight: 600;
+}
+.conversation-ai-summary.md-body h1 { font-size: 1.3em; }
+.conversation-ai-summary.md-body h2 { font-size: 1.18em; }
+.conversation-ai-summary.md-body h3 { font-size: 1.06em; }
+.conversation-ai-summary.md-body p { margin: 0.5em 0; }
+.conversation-ai-summary.md-body ul,
+.conversation-ai-summary.md-body ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.conversation-ai-summary.md-body li { margin: 0.2em 0; }
+.conversation-ai-summary.md-body li > ul,
+.conversation-ai-summary.md-body li > ol { margin: 0.2em 0; }
+.conversation-ai-summary.md-body code {
+  padding: 0.12em 0.4em;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.conversation-ai-summary.md-body pre {
+  margin: 0.6em 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  overflow-x: auto;
+}
+.conversation-ai-summary.md-body pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.88em;
+}
+.conversation-ai-summary.md-body blockquote {
+  margin: 0.6em 0;
+  padding-left: 12px;
+  border-left: 3px solid rgba(var(--accent-rgb), 0.5);
+  opacity: 0.85;
+}
+.conversation-ai-summary.md-body hr {
+  margin: 0.9em 0;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.conversation-ai-summary.md-body strong { font-weight: 600; }
+
 .conversation-list {
   display: flex;
   flex-direction: column;

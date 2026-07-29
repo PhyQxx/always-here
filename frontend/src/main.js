@@ -591,7 +591,7 @@ ipcMain.handle('voice-status', async () => {
   return { connected: Boolean(voiceClient && voiceClient.isConnected) }
 })
 
-function requestXiaozhiApi(pathname, body, contentType = 'application/json') {
+function requestXiaozhiApi(pathname, body, contentType = 'application/json', timeoutMs = 20000) {
   return new Promise((resolve) => {
     const voice = getCurrentVoiceConfig()
     let url
@@ -625,7 +625,7 @@ function requestXiaozhiApi(pathname, body, contentType = 'application/json') {
       })
     })
     req.on('error', () => resolve({ success: false, message: '无法连接小智 HTTP 服务' }))
-    req.setTimeout(20000, () => {
+    req.setTimeout(timeoutMs, () => {
       req.destroy()
       resolve({ success: false, message: '小智 HTTP 服务请求超时' })
     })
@@ -670,15 +670,8 @@ ipcMain.handle('conversation-history', async (_, options = {}) => {
 })
 
 ipcMain.handle('conversation-summary', async (_, options = {}) => {
-  const dbg = (msg) => {
-    const line = `[${new Date().toISOString()}] ${msg}\n`
-    console.log('[summary]', msg)
-    try { fs.appendFileSync(path.join(app.getPath('userData'), 'summary-debug.log'), line) } catch {}
-  }
-  dbg('收到请求 options=' + JSON.stringify(options))
   try {
     const entries = getConversationHistory({ ...options, limit: 500 })
-    dbg('读取到对话条数: ' + entries.length)
     if (!entries.length) return { ok: false, error: '当前范围内暂无对话' }
     const transcript = entries.map((entry) => {
       const speaker = entry.role === 'user' ? '用户' : '伙伴'
@@ -689,15 +682,89 @@ ipcMain.handle('conversation-summary', async (_, options = {}) => {
       prompt: `请总结下面这段用户与桌面伙伴的对话。按“聊了什么、用户状态与偏好、待办或值得记住的事”组织；没有内容的栏目可省略。\n\n${transcript}`,
       max_tokens: 700
     }))
-    dbg('开始请求小智 /api/ai/chat, transcript 长度=' + transcript.length)
-    const result = await requestXiaozhiApi('/api/ai/chat', body)
-    dbg('小智返回: ' + JSON.stringify(result).slice(0, 200))
+    const result = await requestXiaozhiApi('/api/ai/chat', body, 'application/json', 60000)
     return result.success && result.text
       ? { ok: true, text: result.text }
       : { ok: false, error: result.message || 'AI 总结失败' }
   } catch (error) {
-    dbg('异常: ' + (error && error.stack ? error.stack : String(error)))
     return { ok: false, error: error.message || 'AI 总结失败' }
+  }
+})
+
+// 清空对话历史(category=conversation)
+ipcMain.handle('conversation-clear', async () => {
+  try {
+    const removed = historyStore.clear('conversation')
+    return { ok: true, removed }
+  } catch (error) {
+    return { ok: false, error: error.message || '清空对话历史失败' }
+  }
+})
+
+// 视觉(屏幕观察)记录:查看 / 清空
+// 隐私敏感数据,允许用户查看与删除。
+function getVisionHistory({ days = 7, limit = 200 } = {}) {
+  const numericDays = days === 'all' ? null : Math.max(1, Number(days) || 7)
+  const since = numericDays ? new Date(Date.now() - numericDays * 86400000).toISOString() : null
+  return historyStore.list({
+    predicate: (record) => record.category === 'vision',
+    since,
+    limit: Math.min(Math.max(Number(limit) || 200, 1), 1000)
+  })
+}
+
+ipcMain.handle('vision-history', async (_, options = {}) => {
+  try {
+    return { ok: true, entries: getVisionHistory(options) }
+  } catch (error) {
+    return { ok: false, error: error.message || '读取屏幕观察记录失败', entries: [] }
+  }
+})
+
+ipcMain.handle('vision-clear', async () => {
+  try {
+    const removed = historyStore.clear('vision')
+    // 清空内存里的最新视觉描述缓存,避免下一次主动搭话基于已删除的旧描述
+    lastVisionDescription = ''
+    return { ok: true, removed }
+  } catch (error) {
+    return { ok: false, error: error.message || '清空屏幕观察记录失败' }
+  }
+})
+
+// 屏幕识别记录(vision)：工作汇报日报/周报的数据来源
+function getVisionHistory({ days = 1, limit = 1000 } = {}) {
+  const numericDays = days === 'all' ? null : Math.max(1, Number(days) || 1)
+  const since = numericDays ? new Date(Date.now() - numericDays * 86400000).toISOString() : null
+  return historyStore.list({
+    predicate: (record) => record.category === 'vision',
+    since,
+    limit: Math.min(Math.max(Number(limit) || 1000, 1), 2000)
+  })
+}
+
+ipcMain.handle('work-report', async (_, options = {}) => {
+  try {
+    const entries = getVisionHistory({ days: options.range, limit: 1000 })
+    if (!entries.length) return { ok: false, error: '该时间段没有屏幕识别记录' }
+    // 每条按“【HH:MM】描述”组织，让模型感知时间分布；截断末尾 16000 字符以防超服务端上限
+    const transcript = entries.map((entry) => {
+      const time = new Date(entry.timestamp)
+      const hh = String(time.getHours()).padStart(2, '0')
+      const mm = String(time.getMinutes()).padStart(2, '0')
+      return `【${hh}:${mm}】${entry.text}`
+    }).join('\n').slice(-16000)
+    const body = Buffer.from(JSON.stringify({
+      system_prompt: '你是工作汇报助手。只根据给出的屏幕识别记录，用中文客观地整理成工作汇报，使用 Markdown 格式。不要虚构记录里没有的工作内容；如果记录不足以判断，就如实说明。合并相似事项，按主题归类，突出实际进展。',
+      prompt: `请把下面这段时间的屏幕识别记录整理成一份简洁的工作汇报。要求：1) 按“今日工作内容、主要进展、遇到的问题、明日可关注的事项”分栏，没有内容的栏目省略；2) 每个条目用一句话精炼概括，合并重复或相似的事项，不要罗列每条原始记录；3) 整体控制在 600 字以内，确保内容完整不截断。\n\n${transcript}`,
+      max_tokens: 2000
+    }))
+    const result = await requestXiaozhiApi('/api/ai/chat', body, 'application/json', 60000)
+    return result.success && result.text
+      ? { ok: true, text: result.text, count: entries.length }
+      : { ok: false, error: result.message || '生成汇报失败' }
+  } catch (error) {
+    return { ok: false, error: error.message || '生成汇报失败' }
   }
 })
 
