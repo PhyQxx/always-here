@@ -269,7 +269,7 @@ const BUBBLE_DIRECTIONS = ['top', 'right', 'left', 'bottom']
 const BUBBLE_POS_CLASSES = ['bubble-pos-top', 'bubble-pos-right', 'bubble-pos-left', 'bubble-pos-bottom']
 
 // 预测气泡在某方向渲染时的视口矩形(left/top/right/bottom)
-// petRect: 宠物 widget 的视口矩形;bw/bh: 气泡宽高
+// petRect: 伙伴 widget 的视口矩形;bw/bh: 气泡宽高
 function predictBubbleRect(direction, petRect, bw, bh) {
   const gap = BUBBLE_GAP
   switch (direction) {
@@ -311,7 +311,7 @@ function isRectInViewport(r) {
     r.top >= m && r.bottom <= window.innerHeight - m
 }
 
-// 根据宠物在屏幕上的位置,把气泡放到一个能完整显示的方向。
+// 根据伙伴在屏幕上的位置,把气泡放到一个能完整显示的方向。
 // 优先级:上(默认) → 右 → 左 → 下;都不够空间则钳制在视口内。
 function positionBubble() {
   const bubble = document.getElementById('pet-bubble')
@@ -326,7 +326,7 @@ function positionBubble() {
   bubble.style.bottom = ''
   bubble.style.transform = ''
 
-  // 强制布局,测量默认方向下的真实气泡尺寸 + 宠物矩形
+  // 强制布局,测量默认方向下的真实气泡尺寸 + 伙伴矩形
   const petRect = pet.getBoundingClientRect()
   const bw = bubble.offsetWidth
   const bh = bubble.offsetHeight
@@ -347,7 +347,7 @@ function positionBubble() {
   if (defaultRect.top < m) {
     bubble.style.bottom = 'auto'
     bubble.style.top = m + 'px'
-    // left 可能也溢出(气泡比宠物宽时),钳制水平
+    // left 可能也溢出(气泡比伙伴宽时),钳制水平
     if (defaultRect.left < m) {
       bubble.style.left = m + 'px'
       bubble.style.transform = 'none'
@@ -373,7 +373,7 @@ function showBubble(text, options = {}) {
   bubbleText.textContent = text
   bubble.classList.remove('hidden')
   setBubbleActionsVisible(Boolean(options.confirmable))
-  // 气泡显示后,根据宠物在屏幕上的位置自动选择一个不超出视口的方向
+  // 气泡显示后,根据伙伴在屏幕上的位置自动选择一个不超出视口的方向
   positionBubble()
   if (bubbleTimeout) clearTimeout(bubbleTimeout)
   // persistent:不设自动关闭计时(语音回复用——逐句更新气泡,
@@ -456,7 +456,7 @@ function buildContextPrompt(config) {
   if (noteTodos > 0) ctx.push(`便签里还有${noteTodos}个待办没完成`)
 
   const ctxText = ctx.length > 0 ? `\n[行为数据] ${ctx.join('、')}` : ''
-  return `你是桌面陪伴宠物,现在是${period}。${moodDesc}${ctxText}
+  return `你是桌面陪伴伙伴,现在是${period}。${moodDesc}${ctxText}
 基于以上信息,主动跟用户说一句话(20字以内),自然不机械。如果有该关心的(如漏喝水/久坐/待办),优先关心;没有就轻松聊一句。`
 }
 
@@ -540,7 +540,7 @@ async function tryAiChat(prompt) {
     // 登记:这是发给小智的引导指令,服务端 detect 模式会把它当 stt 回显,
     // 但它不是真实用户发言,不应出现在前台气泡(petVoice.mjs 据此过滤)
     window.dispatchEvent(new CustomEvent('pet-voice-system-prompt', { detail: text }))
-    const res = await window.alwaysHere.voiceSendText(text)
+    const res = await window.alwaysHere.voiceSendSystemText(text)
     return Boolean(res?.ok)
   } catch {
     return false
@@ -553,7 +553,7 @@ function startPetChatLoop() {
   const chatSettings = normalizePetChatSettings(config.petChat)
   config.petChat = chatSettings
 
-  // 视觉(看屏幕)已启用时,定时聊天交给 AI 自主决定(vision-start-loop),
+  // 视觉(看屏幕)已启用时,主动聊天交给“用户未回复”计时器,
   // 不再跑这个"无脑定时蹦台词"的循环,避免频繁打扰
   if (config.vision?.enabled) {
     chatTimer = null
@@ -714,7 +714,7 @@ export async function initPet(getConfig, saveConfig) {
     // 番茄钟完成 → AI 生成个性化鼓励(基于今日完成数)
     if (config.voice?.enabled) {
       const recent = summarizeRecentDays(config.activityLog || [], 1)
-      const prompt = `用户刚完成了一个番茄钟(今日已完成约${recent.entries}条行为记录,好感度${config.happiness})。用桌面陪伴宠物的口吻,鼓励一句(15字以内),带点成就感。`
+      const prompt = `用户刚完成了一个番茄钟(今日已完成约${recent.entries}条行为记录,好感度${config.happiness})。用桌面陪伴伙伴的口吻,鼓励一句(15字以内),带点成就感。`
       tryAiChat(prompt)
     }
   })
@@ -738,7 +738,7 @@ export async function initPet(getConfig, saveConfig) {
         prompt += `日薪约${daily}元。`
       }
       if (overtimeHrs > 0) prompt += `最近加班约${overtimeHrs}小时。`
-      prompt += `用桌面陪伴宠物的口吻,说一句下班播报(20字以内),可以提到收入或鼓励休息。`
+      prompt += `用桌面陪伴伙伴的口吻,说一句下班播报(20字以内),可以提到收入或鼓励休息。`
       tryAiChat(prompt)
     }
   })

@@ -518,6 +518,13 @@ ASR:
     base_url: https://api.openai.com/v1/audio/transcriptions
     model_name: gpt-4o-mini-transcribe
     output_dir: tmp/
+  MimoASR:
+    # 小米 MiMo ASR 使用 chat/completions + input_audio，不兼容传统 transcription 接口。
+    type: mimo
+    api_key: 你的小米MiMo API密钥
+    base_url: https://api.xiaomimimo.com/v1
+    model_name: mimo-v2.5-asr
+    output_dir: tmp/
   GroqASR:
     # Groq语音识别服务，需要先在Groq Console创建API密钥
     # 申请步骤：

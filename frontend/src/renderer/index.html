@@ -98,11 +98,10 @@
     <div class="settings-tabs" id="settings-tabs">
       <div class="settings-tab active" data-tab="components">组件</div>
       <div class="settings-tab" data-tab="clock">时钟</div>
-      <div class="settings-tab" data-tab="pet">宠物</div>
+      <div class="settings-tab" data-tab="pet">伙伴</div>
       <div class="settings-tab" data-tab="timer">秒表</div>
       <div class="settings-tab" data-tab="note">便签</div>
       <div class="settings-tab" data-tab="wageman">打工</div>
-      <div class="settings-tab" data-tab="voice">语音</div>
       <div class="settings-tab" data-tab="system">系统</div>
     </div>
     <div class="settings-body">
@@ -111,7 +110,7 @@
         <div class="settings-section-title" data-settings-scope="always">可见组件</div>
         <div class="settings-grid">
           <div class="setting-row" data-settings-scope="clock"><label><input type="checkbox" id="setting-clock" checked> 时钟</label></div>
-          <div class="setting-row" data-settings-scope="pet"><label><input type="checkbox" id="setting-pet" checked> 宠物</label></div>
+          <div class="setting-row" data-settings-scope="pet"><label><input type="checkbox" id="setting-pet" checked> 伙伴</label></div>
           <div class="setting-row" data-settings-scope="timer"><label><input type="checkbox" id="setting-timer" checked> 秒表</label></div>
           <div class="setting-row" data-settings-scope="note"><label><input type="checkbox" id="setting-note" checked> 便签</label></div>
           <div class="setting-row" data-settings-scope="wageman"><label><input type="checkbox" id="setting-wageman" checked> 打工倒计时</label></div>
@@ -126,19 +125,19 @@
 
       <!-- Pet Tab -->
       <div class="settings-tab-content" data-tab-content="pet">
-        <div class="settings-section-title" data-settings-scope="pet">宠物管理器</div>
+        <div class="settings-section-title" data-settings-scope="pet">伙伴管理器</div>
         <div class="pet-manager-list" id="pet-manager-list" data-settings-scope="pet"></div>
 
         <div class="settings-section-title" data-settings-scope="pet">库设置</div>
         <div class="setting-row pet-folder-row" data-settings-scope="pet">
-          <div class="setting-label">宠物文件夹</div>
+          <div class="setting-label">伙伴文件夹</div>
           <div class="setting-controls">
             <div class="pet-folder-value" id="setting-pet-folder"></div>
             <button type="button" id="setting-pet-folder-choose" class="btn-sm">更改</button>
           </div>
         </div>
         <div class="setting-row pet-package-row" data-settings-scope="pet">
-          <div class="setting-label">导入宠物</div>
+          <div class="setting-label">导入伙伴</div>
           <div class="setting-controls">
             <a href="https://codex-pets.net/" id="pet-download-link" class="link-sm">下载更多</a>
             <button type="button" id="pet-package-import" class="btn-sm">导入 .zip 包</button>
@@ -275,18 +274,21 @@
         </div>
       </div>
 
-      <!-- Voice Tab -->
-      <div class="settings-tab-content" data-tab-content="voice">
-        <div class="settings-section-title" data-settings-scope="global">语音对话(小智)</div>
+      <!-- Partner voice settings: shown together with the Partner tab -->
+      <div class="settings-tab-content" data-tab-content="pet">
+        <div class="settings-section-title" data-settings-scope="pet">语音与对话</div>
+        <div class="setting-row" data-settings-scope="pet">
+          <button type="button" id="conversation-history-open" class="btn-block">查看对话</button>
+        </div>
         <div class="settings-grid">
-          <div class="setting-row" data-settings-scope="global">
+          <div class="setting-row" data-settings-scope="pet">
             <label><input type="checkbox" id="voice-enabled"> 启用语音对话</label>
           </div>
-        <div class="setting-row" data-settings-scope="global">
+        <div class="setting-row" data-settings-scope="pet">
           <label><input type="checkbox" id="voice-autoplay" checked> 自动播放回复语音</label>
         </div>
         </div>
-        <div class="setting-row" data-settings-scope="global">
+        <div class="setting-row" data-settings-scope="pet">
           <div class="setting-label">音色</div>
           <div class="setting-controls">
             <select id="voice-tts-voice" class="input-sm" style="width: 240px">
@@ -302,49 +304,55 @@
             <span class="status-text" id="voice-tts-voice-hint" style="font-size:12px;opacity:0.7;"></span>
           </div>
         </div>
-        <div class="setting-row" data-settings-scope="global">
+        <div class="setting-row" data-settings-scope="pet">
           <div class="setting-label">服务端地址</div>
           <div class="setting-controls">
             <input type="text" id="voice-server-url" class="input-sm" style="width: 240px" placeholder="ws://127.0.0.1:8000/xiaozhi/v1/">
           </div>
         </div>
-        <div class="setting-row" data-settings-scope="global">
+        <div class="setting-row" data-settings-scope="pet">
+          <div class="setting-label">服务端 HTTP 地址</div>
+          <div class="setting-controls">
+            <input type="text" id="voice-api-url" class="input-sm" style="width: 240px" placeholder="http://127.0.0.1:8003/">
+          </div>
+        </div>
+        <div class="setting-row" data-settings-scope="pet">
           <div class="setting-label">Token(可选)</div>
           <div class="setting-controls">
             <input type="text" id="voice-token" class="input-sm" style="width: 240px" placeholder="自建服务端默认无需">
           </div>
         </div>
-        <div class="setting-row" data-settings-scope="global">
+        <div class="setting-row" data-settings-scope="pet">
           <div class="setting-label">唤醒快捷键</div>
           <div class="setting-controls">
             <input type="text" id="voice-trigger-key" class="input-sm" style="width: 200px" placeholder="CommandOrControl+Shift+Space">
             <span class="status-text" id="voice-trigger-key-hint"></span>
           </div>
         </div>
-        <div class="setting-row" data-settings-scope="global">
+        <div class="setting-row" data-settings-scope="pet">
           <div class="setting-label">设备 ID</div>
           <div class="setting-controls">
             <span class="value-label" id="voice-device-id">(未生成)</span>
           </div>
         </div>
-        <div class="setting-row" data-settings-scope="global">
+        <div class="setting-row" data-settings-scope="pet">
           <button type="button" id="voice-test-connect" class="btn-primary">测试连接</button>
           <span class="status-text" id="voice-test-status"></span>
         </div>
 
-        <div class="settings-section-title" data-settings-scope="global">看屏幕说话</div>
-        <div class="setting-row" data-settings-scope="global" style="flex-direction:column;align-items:flex-start;gap:4px;">
+        <div class="settings-section-title" data-settings-scope="pet">看屏幕说话</div>
+        <div class="setting-row" data-settings-scope="pet" style="flex-direction:column;align-items:flex-start;gap:4px;">
           <label><input type="checkbox" id="vision-enabled"> 启用看屏幕说话</label>
-          <span class="status-text" style="font-size:12px;opacity:0.7;">⚠️ 截屏会发送到智谱服务器分析,注意隐私</span>
+          <span class="status-text" style="font-size:12px;opacity:0.7;">⚠️ 所有屏幕的截图都会发送到智谱服务器分析,注意隐私</span>
         </div>
-        <div class="setting-row" data-settings-scope="global">
-          <div class="setting-label">定时看屏幕(秒)</div>
+        <div class="setting-row" data-settings-scope="pet">
+          <div class="setting-label">未回复多久后主动搭话(秒)</div>
           <div class="setting-controls">
-            <input type="number" id="vision-interval" min="0" step="5" class="input-sm" style="width:60px">
+            <input type="number" id="vision-inactivity" min="0" step="5" class="input-sm" style="width:60px">
             <span class="unit">0=关闭</span>
           </div>
         </div>
-        <div class="setting-row" data-settings-scope="global">
+        <div class="setting-row" data-settings-scope="pet">
           <button type="button" id="vision-look-now" class="btn-primary">看一眼屏幕</button>
           <span class="status-text" id="vision-status"></span>
         </div>
@@ -430,6 +438,30 @@
       <div class="activity-chart" id="activity-chart"></div>
       <div class="activity-analysis" id="activity-analysis"></div>
       <div class="activity-list" id="activity-list"></div>
+    </div>
+  </div>
+
+  <div id="conversation-panel" class="conversation-panel hidden">
+    <div class="conversation-panel-header">
+      <div>
+        <h3>对话记录</h3>
+        <p>你和伙伴说过的话，会按时间保存在本机</p>
+      </div>
+      <button type="button" id="conversation-history-close">关闭</button>
+    </div>
+    <div class="conversation-toolbar">
+      <select id="conversation-range" aria-label="对话时间范围">
+        <option value="1">今天</option>
+        <option value="7" selected>最近 7 天</option>
+        <option value="30">最近 30 天</option>
+        <option value="all">全部时间</option>
+      </select>
+      <span id="conversation-count" class="conversation-count"></span>
+      <button type="button" id="conversation-summary-generate" class="btn-primary">AI 总结</button>
+    </div>
+    <div class="conversation-body">
+      <div id="conversation-summary" class="conversation-ai-summary hidden"></div>
+      <div id="conversation-list" class="conversation-list"></div>
     </div>
   </div>
 

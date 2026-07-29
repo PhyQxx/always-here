@@ -3,6 +3,7 @@ from aiohttp import web
 from config.logger import setup_logging
 from core.api.ota_handler import OTAHandler
 from core.api.vision_handler import VisionHandler
+from core.api.ai_handler import AIHandler
 
 TAG = __name__
 
@@ -13,6 +14,7 @@ class SimpleHttpServer:
         self.logger = setup_logging()
         self.ota_handler = OTAHandler(config)
         self.vision_handler = VisionHandler(config)
+        self.ai_handler = AIHandler(config)
 
     def _get_websocket_url(self, local_ip: str, port: int) -> str:
         """获取websocket地址
@@ -40,7 +42,7 @@ class SimpleHttpServer:
             port = int(server_config.get("http_port", 8003))
 
             if port:
-                app = web.Application()
+                app = web.Application(client_max_size=10 * 1024 * 1024)
 
                 if not read_config_from_api:
                     # 如果没有开启智控台，只是单模块运行，就需要再添加简单OTA接口，用于下发websocket接口
@@ -72,6 +74,10 @@ class SimpleHttpServer:
                         web.options(
                             "/mcp/vision/explain", self.vision_handler.handle_options
                         ),
+                        web.post("/api/ai/asr", self.ai_handler.handle_asr),
+                        web.options("/api/ai/asr", self.ai_handler.handle_options),
+                        web.post("/api/ai/chat", self.ai_handler.handle_chat),
+                        web.options("/api/ai/chat", self.ai_handler.handle_options),
                     ]
                 )
 

@@ -203,6 +203,6 @@ test('importCodexPetPackage rejects packages without a valid pet manifest', asyn
         fs.writeFileSync(path.join(destination, 'spritesheet.webp'), 'sprite-bytes')
       }
     }),
-    /没有找到有效的宠物配置/
+    /没有找到有效的伙伴配置/
   )
 })

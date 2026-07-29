@@ -94,7 +94,7 @@
   pointer-events: auto;
 }
 
-/* 方向锚点:通过 top/right/left/bottom + margin 切换气泡相对宠物的位置。
+/* 方向锚点:通过 top/right/left/bottom + margin 切换气泡相对伙伴的位置。
    居中变换放在 transform(垂直方向 translateX(-50%),水平方向 translateY(-50%))。
    默认(无显式类或 .bubble-pos-top):向上生长 */
 .pet-bubble,
@@ -105,7 +105,7 @@
   transform: translateX(-50%);
 }
 
-/* 向下:出现在宠物下方 */
+/* 向下:出现在伙伴下方 */
 .pet-bubble.bubble-pos-bottom {
   top: 100%;
   bottom: auto;
@@ -115,7 +115,7 @@
   transform: translateX(-50%);
 }
 
-/* 向右:出现在宠物右侧,垂直居中 */
+/* 向右:出现在伙伴右侧,垂直居中 */
 .pet-bubble.bubble-pos-right {
   left: 100%;
   right: auto;
@@ -125,7 +125,7 @@
   transform: translateY(-50%);
 }
 
-/* 向左:出现在宠物左侧,垂直居中 */
+/* 向左:出现在伙伴左侧,垂直居中 */
 .pet-bubble.bubble-pos-left {
   right: 100%;
   left: auto;
@@ -143,7 +143,7 @@
   opacity: 0.8;
 }
 
-/* 小三角箭头:指向宠物。默认(向上/bubble-pos-top)在气泡底部、朝下 */
+/* 小三角箭头:指向伙伴。默认(向上/bubble-pos-top)在气泡底部、朝下 */
 .pet-bubble::after {
   content: '';
   position: absolute;
@@ -151,7 +151,7 @@
   height: 0;
 }
 
-/* 向上:箭头在底部居中,朝下指向宠物 */
+/* 向上:箭头在底部居中,朝下指向伙伴 */
 .pet-bubble::after,
 .pet-bubble.bubble-pos-top::after {
   left: 50%;
@@ -164,7 +164,7 @@
   border-bottom: none;
 }
 
-/* 向下:箭头在顶部居中,朝上指向宠物 */
+/* 向下:箭头在顶部居中,朝上指向伙伴 */
 .pet-bubble.bubble-pos-bottom::after {
   left: 50%;
   top: -6px;
@@ -176,7 +176,7 @@
   border-top: none;
 }
 
-/* 向右:箭头在左侧居中,朝右指向宠物 */
+/* 向右:箭头在左侧居中,朝右指向伙伴 */
 .pet-bubble.bubble-pos-right::after {
   left: -6px;
   top: 50%;
@@ -188,7 +188,7 @@
   border-left: none;
 }
 
-/* 向左:箭头在右侧居中,朝左指向宠物 */
+/* 向左:箭头在右侧居中,朝左指向伙伴 */
 .pet-bubble.bubble-pos-left::after {
   right: -6px;
   left: auto;

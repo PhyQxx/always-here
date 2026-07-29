@@ -1,6 +1,6 @@
 export const WIDGET_LABELS = {
   clock: '时钟',
-  pet: '宠物',
+  pet: '伙伴',
   timer: '秒表',
   note: '便签',
   wageman: '打工倒计时'

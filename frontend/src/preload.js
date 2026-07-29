@@ -26,13 +26,16 @@ contextBridge.exposeInMainWorld('alwaysHere', {
   voiceConnect: () => ipcRenderer.invoke('voice-connect'),
   voiceDisconnect: () => ipcRenderer.invoke('voice-disconnect'),
   voiceSendText: (text) => ipcRenderer.invoke('voice-send-text', text),
+  voiceSendSystemText: (text) => ipcRenderer.invoke('voice-send-system-text', text),
   voiceAbort: () => ipcRenderer.invoke('voice-abort'),
   voiceStatus: () => ipcRenderer.invoke('voice-status'),
   voiceAsr: (wavBuffer) => ipcRenderer.invoke('voice-asr', wavBuffer),
   voiceReregisterShortcut: () => ipcRenderer.invoke('voice-reregister-shortcut'),
+  getConversationHistory: (options) => ipcRenderer.invoke('conversation-history', options),
+  summarizeConversation: (options) => ipcRenderer.invoke('conversation-summary', options),
   // ── 看屏幕说话(视觉) ──
   visionLookAndSay: () => ipcRenderer.invoke('vision-look-and-say'),
-  visionStartLoop: (minutes) => ipcRenderer.invoke('vision-start-loop', minutes),
+  visionStartLoop: (seconds) => ipcRenderer.invoke('vision-start-loop', seconds),
   visionStopLoop: () => ipcRenderer.invoke('vision-stop-loop'),
   onVoiceEvent: (callback) => ipcRenderer.on('voice-event', (_event, data) => callback(data))
 })

@@ -1,5 +1,5 @@
 // 小智 llm.emotion → 语义动作映射。
-// pet.js 会根据当前宠物能力把新动作解析为完整动作或 v1 回退动作。
+// pet.js 会根据当前伙伴能力把新动作解析为完整动作或 v1 回退动作。
 
 const EMOTION_TO_ANIMATION = {
   happy: 'dance',
@@ -40,7 +40,7 @@ const EMOTION_TO_EMOTE = {
   embarrassed: '//'
 }
 
-// 将小智 emotion 映射为宠物动画名;未知 emotion 回落到 waiting(倾听/待机感)
+// 将小智 emotion 映射为伙伴动画名;未知 emotion 回落到 waiting(倾听/待机感)
 export function emotionToAnimation(emotion) {
   if (typeof emotion !== 'string') return 'waiting'
   return EMOTION_TO_ANIMATION[emotion] || 'waiting'
@@ -51,7 +51,7 @@ export function emotionToEmote(emotion) {
   return EMOTION_TO_EMOTE[emotion] || null
 }
 
-// 语音对话阶段 → 宠物动画
+// 语音对话阶段 → 伙伴动画
 export const VOICE_PHASE_ANIMATION = {
   idle: 'idle',
   listening: 'waiting', // 倾听:待机专注感

@@ -6,6 +6,7 @@ export const DEFAULT_VOICE_SETTINGS = {
   // 小智服务端 WebSocket 地址(自建默认本地 8000 端口,与 xiaozhi-server config.yaml 一致)
   // 用 127.0.0.1 而非 localhost,避免某些环境把 localhost 解析成 IPv6 ::1 导致连接被拒
   serverUrl: 'ws://127.0.0.1:8000/xiaozhi/v1/',
+  apiUrl: 'http://127.0.0.1:8003/',
   deviceId: '', // 空则由 config.js 首次启动生成持久 UUID
   clientId: '', // 同上
   token: '', // 自建服务端 auth 关闭时留空
@@ -30,10 +31,17 @@ function normalizeWsUrl(value) {
   return trimmed.endsWith('/') ? trimmed : trimmed + '/'
 }
 
+function normalizeHttpUrl(value) {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  if (!trimmed) return DEFAULT_VOICE_SETTINGS.apiUrl
+  return trimmed.endsWith('/') ? trimmed : trimmed + '/'
+}
+
 export function normalizeVoiceSettings(input = {}) {
   return {
     enabled: boolValue(input.enabled, DEFAULT_VOICE_SETTINGS.enabled),
     serverUrl: normalizeWsUrl(input.serverUrl),
+    apiUrl: normalizeHttpUrl(input.apiUrl),
     deviceId: stringValue(input.deviceId, ''),
     clientId: stringValue(input.clientId, ''),
     token: typeof input.token === 'string' ? input.token.trim() : '',
@@ -49,14 +57,14 @@ export function normalizeVoiceSettings(input = {}) {
 // ── 看屏幕说话(视觉)设置 ──
 export const DEFAULT_VISION_SETTINGS = {
   enabled: false,             // 隐私敏感,默认关
-  autoIntervalSeconds: 0      // 0=关闭定时看屏幕(单位:秒)
+  inactivitySeconds: 20       // 用户多久没发消息后主动看屏幕搭话,0=关闭
 }
 
 export function normalizeVisionSettings(input = {}) {
   return {
     enabled: boolValue(input.enabled, DEFAULT_VISION_SETTINGS.enabled),
-    autoIntervalSeconds: Number.isFinite(input.autoIntervalSeconds)
-      ? Math.max(0, Math.round(input.autoIntervalSeconds))
-      : DEFAULT_VISION_SETTINGS.autoIntervalSeconds
+    inactivitySeconds: Number.isFinite(input.inactivitySeconds)
+      ? Math.max(0, Math.round(input.inactivitySeconds))
+      : DEFAULT_VISION_SETTINGS.inactivitySeconds
   }
 }

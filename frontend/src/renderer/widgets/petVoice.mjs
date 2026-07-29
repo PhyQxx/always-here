@@ -1,7 +1,7 @@
-// 桌面宠物的语音/对话能力(接入小智 ESP32 服务端)
+// 桌面伙伴的语音/对话能力(接入小智 ESP32 服务端)
 //
-// M2 阶段:文字对话。提供宠物气泡旁的输入框,用户打字 → 小智 detect 模式 →
-//         回复文字显示在气泡 + 情绪驱动宠物动画。
+// M2 阶段:文字对话。提供伙伴气泡旁的输入框,用户打字 → 小智 detect 模式 →
+//         回复文字显示在气泡 + 情绪驱动伙伴动画。
 // M5 阶段:麦克风按钮接入真实语音(见 petVoiceCapture.mjs)。
 //
 // 设计:
@@ -125,7 +125,7 @@ function stopAudioPlayback() {
 }
 
 // 打断小智说话:发 abort 给服务端 + 立即停止本地音频播放
-// 在任何新的用户交互(发消息、点宠物、开始听)时,如果小智正在说话就先打断
+// 在任何新的用户交互(发消息、点伙伴、开始听)时,如果小智正在说话就先打断
 async function interruptSpeaking() {
   if (!speaking) return
   speaking = false
@@ -171,14 +171,14 @@ function handleVoiceEvent(event) {
           setPetAnimation(VOICE_PHASE_ANIMATION.thinking)
           break
         }
-        // 跳过本端主动发出的"引导 prompt"(如宠物主动找话),那些是发给 AI 的指令,不是用户发言
+        // 跳过本端主动发出的"引导 prompt"(如伙伴主动找话),那些是发给 AI 的指令,不是用户发言
         if (!consumeSystemPrompt(event.text)) {
           showVoiceBubble(`🧑 ${event.text}`)
         }
       }
       break
     case 'llm':
-      // 情绪驱动宠物动画
+      // 情绪驱动伙伴动画
       setPetAnimation(emotionToAnimation(event.emotion))
       if (emotionToEmote(event.emotion)) {
         window.dispatchEvent(new CustomEvent('pet-emote', { detail: emotionToEmote(event.emotion) }))
@@ -221,7 +221,7 @@ function handleVoiceEvent(event) {
       break
     case 'vision-description':
       // 截屏描述已发给小智;不重复显示气泡(lookAndSay 已显示过提示),
-      // 后续宠物台词由 tts 事件展示
+      // 后续伙伴台词由 tts 事件展示
       break
     case 'vision-error':
       showVoiceBubble(`⚠️ ${event.message || '看屏幕失败'}`)
@@ -278,7 +278,7 @@ function enrichWithNoteContext(userText) {
   return `${userText}\n\n[用户便签内容]\n${excerpt}\n\n请结合便签内容回答。`
 }
 
-// 看屏幕说话:截屏 → 小智视觉描述 → 小智 LLM 以宠物口吻评论
+// 看屏幕说话:截屏 → 小智视觉描述 → 小智 LLM 以伙伴口吻评论
 async function lookAndSay() {
   if (!voiceSettings().enabled) {
     showVoiceBubble('⚠️ 请先在设置中开启语音功能')
@@ -291,7 +291,7 @@ async function lookAndSay() {
     showVoiceBubble(`⚠️ ${res?.error || '看屏幕失败'}`)
     setPetAnimation(VOICE_PHASE_ANIMATION.idle)
   }
-  // 成功时:描述已发给小智,后续 tts 事件会展示宠物台词
+  // 成功时:描述已发给小智,后续 tts 事件会展示伙伴台词
 }
 
 function buildInputUI() {
@@ -495,7 +495,7 @@ function applyVoiceBarVisibility() {
   const enabled = voiceSettings().enabled
   const bar = document.getElementById('pet-voice-bar')
   if (!bar) return
-  // 启用且宠物可见时显示输入栏入口(但默认收起,避免占桌面)
+  // 启用且伙伴可见时显示输入栏入口(但默认收起,避免占桌面)
   if (enabled) {
     bar.classList.remove('hidden')
   } else {
@@ -536,15 +536,15 @@ export async function initPetVoice(getConfig, saveConfig) {
     if (command === 'vision-look') lookAndSay()
   })
 
-  // 点击宠物时,若输入栏被隐藏则重新唤出(找回入口)
+  // 点击伙伴时,若输入栏被隐藏则重新唤出(找回入口)
   window.addEventListener('pet-voice-show-bar', () => {
     const bar = document.getElementById('pet-voice-bar')
     if (bar?.classList.contains('hidden')) showVoiceBar()
   })
 
-  // 注:打断已改为发送消息时触发,不再在点击宠物时打断(见 sendText)
+  // 注:打断已改为发送消息时触发,不再在点击伙伴时打断(见 sendText)
 
-  // 登记本端发给小智的"引导 prompt"(如宠物主动找话)。
+  // 登记本端发给小智的"引导 prompt"(如伙伴主动找话)。
   // 这类文本是发给 AI 的指令,detect 模式仍会回 stt,但不应在气泡里当作用户发言显示。
   window.addEventListener('pet-voice-system-prompt', (event) => {
     const text = typeof event.detail === 'string' ? event.detail : event.detail?.text

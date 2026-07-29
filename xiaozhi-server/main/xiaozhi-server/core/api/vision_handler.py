@@ -1,12 +1,12 @@
 import json
 import copy
+import asyncio
 from aiohttp import web
 from config.logger import setup_logging
 from core.api.base_handler import BaseHandler
 from core.utils.util import get_vision_url, is_valid_image_file
 from core.utils.vllm import create_instance
 from config.config_loader import get_private_config_from_api
-from core.utils.auth import AuthToken
 import base64
 from typing import Tuple, Optional
 from plugins_func.register import Action
@@ -20,29 +20,14 @@ MAX_FILE_SIZE = 5 * 1024 * 1024
 class VisionHandler(BaseHandler):
     def __init__(self, config: dict):
         super().__init__(config)
-        # 初始化认证工具
-        self.auth = AuthToken(config["server"]["auth_key"])
 
     def _create_error_response(self, message: str) -> dict:
         """创建统一的错误响应格式"""
         return {"success": False, "message": message}
 
     def _verify_auth_token(self, request) -> Tuple[bool, Optional[str]]:
-        """验证认证token"""
-        # 测试模式：允许特定测试令牌或跳过验证
-        auth_header = request.headers.get("Authorization", "")
-        client_id = request.headers.get("Client-Id", "")
-
-        # 允许测试客户端跳过认证
-        if client_id == "web_test_client":
-            device_id = request.headers.get("Device-Id", "test_device")
-            return True, device_id
-
-        if not auth_header.startswith("Bearer "):
-            return False, None
-
-        token = auth_header[7:]  # 移除"Bearer "前缀
-        return self.auth.verify_token(token)
+        """验证认证token（服务端关闭认证时直接放行）。"""
+        return self._verify_request_auth(request)
 
     async def handle_post(self, request):
         """处理 MCP Vision POST 请求"""
@@ -127,7 +112,9 @@ class VisionHandler(BaseHandler):
                 vllm_type, current_config["VLLM"][select_vllm_module]
             )
 
-            result = vllm.response(question, image_base64)
+            # 视觉供应器是同步 I/O。放入工作线程，否则多屏请求会堵塞 aiohttp
+            # 事件循环并被迫串行，导致后面的屏幕在客户端超时。
+            result = await asyncio.to_thread(vllm.response, question, image_base64)
 
             return_json = {
                 "success": True,

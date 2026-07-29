@@ -14,6 +14,7 @@ test('normalizeVoiceSettings fills defaults and normalizes the ws url', async ()
   const empty = normalizeVoiceSettings({})
   assert.equal(empty.enabled, DEFAULT_VOICE_SETTINGS.enabled)
   assert.equal(empty.serverUrl, DEFAULT_VOICE_SETTINGS.serverUrl)
+  assert.equal(empty.apiUrl, DEFAULT_VOICE_SETTINGS.apiUrl)
   assert.equal(empty.autoPlayTTS, DEFAULT_VOICE_SETTINGS.autoPlayTTS)
   assert.equal(empty.bubbleDurationMs, DEFAULT_VOICE_SETTINGS.bubbleDurationMs)
   // 缺省 device-id / client-id 留空,由主进程首次启动生成
@@ -27,6 +28,12 @@ test('normalizeVoiceSettings ensures server url ends with a trailing slash', asy
   assert.equal(normalizeVoiceSettings({ serverUrl: 'ws://x:8000/xiaozhi/v1/' }).serverUrl, 'ws://x:8000/xiaozhi/v1/')
   // 空 url 回落到默认
   assert.equal(normalizeVoiceSettings({ serverUrl: '   ' }).serverUrl.includes('/xiaozhi/v1/'), true)
+})
+
+test('normalizeVoiceSettings normalizes the HTTP API url', async () => {
+  const { normalizeVoiceSettings } = await loadVoiceSettings()
+  assert.equal(normalizeVoiceSettings({ apiUrl: 'http://x:8003' }).apiUrl, 'http://x:8003/')
+  assert.equal(normalizeVoiceSettings({ apiUrl: 'https://x/api/' }).apiUrl, 'https://x/api/')
 })
 
 test('normalizeVoiceSettings trims token and clamps bubble duration', async () => {
@@ -46,4 +53,13 @@ test('normalizeVoiceSettings preserves a configured trigger key', async () => {
   )
   // 空值回落默认快捷键
   assert.equal(normalizeVoiceSettings({ triggerKey: '' }).triggerKey, 'CommandOrControl+Shift+Space')
+})
+
+test('normalizeVisionSettings defaults to checking in after 20 seconds without a reply', async () => {
+  const { normalizeVisionSettings } = await loadVoiceSettings()
+  assert.equal(normalizeVisionSettings({}).inactivitySeconds, 20)
+  // 旧版固定轮询字段不沿用，升级后按新的 20 秒未回复机制运行。
+  assert.equal(normalizeVisionSettings({ autoIntervalSeconds: 5 }).inactivitySeconds, 20)
+  assert.equal(normalizeVisionSettings({ inactivitySeconds: 45 }).inactivitySeconds, 45)
+  assert.equal(normalizeVisionSettings({ inactivitySeconds: -1 }).inactivitySeconds, 0)
 })

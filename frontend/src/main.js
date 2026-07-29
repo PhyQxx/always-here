@@ -8,12 +8,7 @@ const { CODEX_PETS_DIR, getPetSpritesheetDataUrl, importCodexPetPackage, isInsid
 const { initUpdater, checkHotUpdate } = require('./updater')
 const { createXiaozhiClient } = require('./voice/xiaozhiClient')
 const opusDecoder = require('./voice/opusDecoder')
-
-// 轻量 LLM 直调参数(用于"看屏幕判断要不要说话",不经过小智服务端)
-// 与小智服务端 config.yaml 的 MimoLLM 保持一致
-const MIMO_CHAT_URL = 'https://api.xiaomimimo.com/v1/chat/completions'
-const MIMO_API_KEY = 'sk-cuv11084hfrun4l7kdj1oyjolyhiftsvs7ioivht8r5wlo1b'
-const MIMO_MODEL = 'mimo-v2.5-pro-ultraspeed'
+const { createHistoryStore } = require('./historyStore')
 
 const PET_CHAT_TONES = [
   { id: 'companion', label: '陪伴型' },
@@ -23,6 +18,18 @@ const PET_CHAT_TONES = [
 ]
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
+const HISTORY_PATH = path.join(app.getPath('userData'), 'history.jsonl')
+const historyStore = createHistoryStore(HISTORY_PATH)
+const latestVisionHistory = historyStore.findLatest((record) => record.category === 'vision')
+let lastVisionDescription = latestVisionHistory?.text || ''
+
+function persistHistory(entry) {
+  try {
+    historyStore.append(entry)
+  } catch (error) {
+    console.error('[history] 写入失败:', error)
+  }
+}
 
 const DEFAULT_CONFIG = {
   configVersion: 1,
@@ -55,6 +62,7 @@ const DEFAULT_CONFIG = {
   voice: {
     enabled: false,
     serverUrl: 'ws://127.0.0.1:8000/xiaozhi/v1/',
+    apiUrl: 'http://127.0.0.1:8003/',
     deviceId: '',
     clientId: '',
     token: '',
@@ -65,7 +73,7 @@ const DEFAULT_CONFIG = {
   },
   vision: {
     enabled: false,            // 看屏幕说话总开关(隐私敏感,默认关)
-    autoIntervalSeconds: 0     // 定时看屏幕间隔(秒),0=关闭定时
+    inactivitySeconds: 20      // 用户多久没有发消息后看屏幕并主动搭话,0=关闭
   },
   happiness: 70,
   noteText: '',
@@ -196,7 +204,7 @@ function refreshTrayMenu() {
       click: () => sendToRenderer('show-settings', null, { reveal: true })
     },
     {
-      label: '宠物说一句',
+      label: '伙伴说一句',
       submenu: [
         {
           label: '直接说',
@@ -260,7 +268,7 @@ ipcMain.handle('list-pets', () => listPets(getConfiguredPetFolder()))
 ipcMain.handle('get-pet-spritesheet', (_, petId) => getPetSpritesheetDataUrl(getConfiguredPetFolder(), petId))
 ipcMain.handle('choose-pet-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: '选择宠物文件夹',
+    title: '选择伙伴文件夹',
     defaultPath: getConfiguredPetFolder(),
     properties: ['openDirectory']
   })
@@ -274,9 +282,9 @@ ipcMain.handle('open-external-url', (_, url) => {
 })
 ipcMain.handle('import-pet-package', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: '导入宠物包',
+    title: '导入伙伴包',
     filters: [
-      { name: 'Codex 宠物包', extensions: ['zip'] },
+      { name: 'Codex 伙伴包', extensions: ['zip'] },
       { name: 'ZIP 压缩包', extensions: ['zip'] }
     ],
     properties: ['openFile']
@@ -368,6 +376,7 @@ function normalizeVoiceConfig(input = {}) {
   return {
     enabled: typeof input.enabled === 'boolean' ? input.enabled : fallback.enabled,
     serverUrl: normalizeWs(input.serverUrl),
+    apiUrl: str(input.apiUrl, fallback.apiUrl).replace(/\/?$/, '/'),
     deviceId: str(input.deviceId, ''),
     clientId: str(input.clientId, ''),
     token: typeof input.token === 'string' ? input.token.trim() : '',
@@ -395,12 +404,16 @@ function ensureVoiceDeviceIds(config) {
   return config
 }
 
+function getCurrentVoiceConfig() {
+  return normalizeVoiceConfig(ensureVoiceDeviceIds(loadConfig()).voice)
+}
+
 function normalizeVisionConfig(input = {}) {
   return {
     enabled: typeof input.enabled === 'boolean' ? input.enabled : false,
-    autoIntervalSeconds: Number.isFinite(input.autoIntervalSeconds)
-      ? Math.max(0, Math.round(input.autoIntervalSeconds))
-      : 0
+    inactivitySeconds: Number.isFinite(input.inactivitySeconds)
+      ? Math.max(0, Math.round(input.inactivitySeconds))
+      : 20
   }
 }
 
@@ -417,12 +430,21 @@ function voiceEmit(event) {
         // 新一轮 TTS:重置解码器,清空上一轮残留
         opusDecoder.resetDecoder()
         // AI 开始说话 → 对话进行中(刷新超时,因为接下来会持续有 tts 事件)
-        markConversationActive()
+        markConversationActive('tts-start')
       } else if (event.state === 'stop') {
         // TTS 结束:flush 残余解码帧,确保播放完整
         opusDecoder.flush()
         // AI 说完话 → 对话结束
-        markConversationIdle()
+        markConversationIdle('tts-stop')
+      } else if (event.state === 'sentence_start' && event.text) {
+        // 长回复可能超过思考超时时间；每句都刷新状态，避免讲到一半被主动搭话打断。
+        markConversationActive('tts-sentence')
+        persistHistory({
+          category: 'conversation',
+          role: 'assistant',
+          source: 'tts',
+          text: event.text
+        })
       }
       // tts 控制事件原样转发(start/sentence_start/stop)
       mainWindow.webContents.send('voice-event', event)
@@ -432,6 +454,7 @@ function voiceEmit(event) {
       if (event.state === 'disconnected' || event.state === 'error') {
         opusDecoder.flush()
         mainWindow.webContents.send('voice-event', { type: 'tts', state: 'stop' })
+        markConversationIdle(`voice-${event.state}`)
         // 自动重连(带指数退避,避免服务未启动时疯狂重试)
         scheduleReconnect()
       }
@@ -525,7 +548,7 @@ ipcMain.handle('voice-disconnect', async () => {
   return { ok: true }
 })
 // 文字对话(M2):注入文本,服务端走 LLM→TTS
-ipcMain.handle('voice-send-text', async (_, text) => {
+async function sendVoiceText(text, { userMessage = false } = {}) {
   if (!voiceClient || !voiceClient.isConnected) {
     // 懒连接:首次发送时自动建立
     voiceConnect()
@@ -539,10 +562,26 @@ ipcMain.handle('voice-send-text', async (_, text) => {
   }
   const sent = voiceClient.sendText(text)
   if (sent) {
-    // 用户发了消息 → 进入对话(AI 将思考并说话),期间定时看屏幕不应打断
-    markConversationActive()
+    if (userMessage) {
+      persistHistory({
+        category: 'conversation',
+        role: 'user',
+        source: 'desktop-input',
+        text
+      })
+      noteUserMessage()
+    }
+    // 发出消息后进入对话(AI 将思考并说话),期间不应主动搭话
+    markConversationActive(userMessage ? 'user-message' : 'system-message')
   }
   return { ok: sent }
+}
+
+ipcMain.handle('voice-send-text', async (_, text) => {
+  return sendVoiceText(text, { userMessage: true })
+})
+ipcMain.handle('voice-send-system-text', async (_, text) => {
+  return sendVoiceText(text)
 })
 ipcMain.handle('voice-abort', async () => {
   if (voiceClient) voiceClient.abort()
@@ -551,107 +590,244 @@ ipcMain.handle('voice-abort', async () => {
 ipcMain.handle('voice-status', async () => {
   return { connected: Boolean(voiceClient && voiceClient.isConnected) }
 })
-// M5 起:渲染进程采集 PCM 后经此上行(由主进程编码,见 opusCodec.js)
-// M5:语音识别(前端直连 mimo ASR,绕过小智服务端 ASR 模块)
-// 渲染进程采集麦克风 PCM → 转 WAV → 经 IPC 传来 → 调 mimo ASR → 返回识别文字
+
+function requestXiaozhiApi(pathname, body, contentType = 'application/json') {
+  return new Promise((resolve) => {
+    const voice = getCurrentVoiceConfig()
+    let url
+    try {
+      url = new URL(pathname.replace(/^\//, ''), voice.apiUrl)
+    } catch {
+      resolve({ success: false, message: '小智 HTTP 服务地址无效' })
+      return
+    }
+    const transport = url.protocol === 'https:' ? require('https') : require('http')
+    const headers = {
+      'Content-Type': contentType,
+      'Content-Length': body.length,
+      'Device-Id': voice.deviceId,
+      'Client-Id': voice.clientId
+    }
+    if (voice.token) headers.Authorization = `Bearer ${voice.token}`
+
+    const req = transport.request(url, { method: 'POST', headers }, (res) => {
+      let data = ''
+      res.on('data', (chunk) => { data += chunk })
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data)
+          resolve(res.statusCode >= 200 && res.statusCode < 300
+            ? parsed
+            : { success: false, message: parsed.message || `HTTP ${res.statusCode}` })
+        } catch {
+          resolve({ success: false, message: `小智服务响应异常（HTTP ${res.statusCode}）` })
+        }
+      })
+    })
+    req.on('error', () => resolve({ success: false, message: '无法连接小智 HTTP 服务' }))
+    req.setTimeout(20000, () => {
+      req.destroy()
+      resolve({ success: false, message: '小智 HTTP 服务请求超时' })
+    })
+    req.write(body)
+    req.end()
+  })
+}
+
+// 渲染进程采集麦克风并转成 WAV，模型调用统一交给 xiaozhi-server。
 ipcMain.handle('voice-asr', async (_, wavBuffer) => {
   try {
     if (!wavBuffer || wavBuffer.length === 0) return { ok: false, error: '空音频' }
-    const buf = Buffer.from(wavBuffer)
-    // mimo ASR:chat/completions + input_audio(base64 wav)
-    const https = require('https')
-    const b64 = buf.toString('base64')
-    const body = JSON.stringify({
-      model: 'mimo-v2.5-asr',
-      messages: [{ role: 'user', content: [
-        { type: 'input_audio', input_audio: { data: b64, format: 'wav' } }
-      ]}]
-    })
-    const result = await new Promise((resolve) => {
-      const req = https.request(MIMO_CHAT_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${MIMO_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body)
-        }
-      }, (res) => {
-        let data = ''
-        res.on('data', (c) => data += c)
-        res.on('end', () => {
-          try {
-            const json = JSON.parse(data)
-            const text = json.choices?.[0]?.message?.content?.trim()
-            resolve(text || '')
-          } catch { resolve('') }
-        })
-      })
-      req.on('error', () => resolve(''))
-      req.setTimeout(15000, () => { req.destroy(); resolve('') })
-      req.write(body)
-      req.end()
-    })
-    return { ok: true, text: result }
+    const result = await requestXiaozhiApi(
+      '/api/ai/asr',
+      Buffer.from(wavBuffer),
+      'audio/wav'
+    )
+    return result.success && result.text
+      ? { ok: true, text: result.text }
+      : { ok: false, error: result.message || '语音识别失败' }
   } catch (e) {
-    return { ok: false, error: e.message }
+    return { ok: false, error: e.message || '语音识别失败' }
+  }
+})
+
+function getConversationHistory({ days = 7, limit = 500 } = {}) {
+  const numericDays = days === 'all' ? null : Math.max(1, Number(days) || 7)
+  const since = numericDays ? new Date(Date.now() - numericDays * 86400000).toISOString() : null
+  return historyStore.list({
+    predicate: (record) => record.category === 'conversation' && ['user', 'assistant'].includes(record.role),
+    since,
+    limit: Math.min(Math.max(Number(limit) || 500, 1), 2000)
+  })
+}
+
+ipcMain.handle('conversation-history', async (_, options = {}) => {
+  try {
+    return { ok: true, entries: getConversationHistory(options) }
+  } catch (error) {
+    return { ok: false, error: error.message || '读取对话记录失败', entries: [] }
+  }
+})
+
+ipcMain.handle('conversation-summary', async (_, options = {}) => {
+  try {
+    const entries = getConversationHistory({ ...options, limit: 500 })
+    if (!entries.length) return { ok: false, error: '当前范围内暂无对话' }
+    const transcript = entries.map((entry) => {
+      const speaker = entry.role === 'user' ? '用户' : '伙伴'
+      return `${speaker}：${entry.text}`
+    }).join('\n').slice(-16000)
+    const body = Buffer.from(JSON.stringify({
+      system_prompt: '你是对话整理助手。只根据给出的对话，用中文输出简洁、温暖且可执行的总结。不要虚构信息。',
+      prompt: `请总结下面这段用户与桌面伙伴的对话。按“聊了什么、用户状态与偏好、待办或值得记住的事”组织；没有内容的栏目可省略。\n\n${transcript}`,
+      max_tokens: 700
+    }))
+    const result = await requestXiaozhiApi('/api/ai/chat', body)
+    return result.success && result.text
+      ? { ok: true, text: result.text }
+      : { ok: false, error: result.message || 'AI 总结失败' }
+  } catch (error) {
+    return { ok: false, error: error.message || 'AI 总结失败' }
   }
 })
 
 // ── 看屏幕说话(视觉) ────────────────────────────────────────────
-// 流程:desktopCapturer 截屏 → JPEG → POST 到小智视觉接口(8003)→ 智谱看图
-//       → 得到屏幕描述 → 作为 prompt 发给小智 LLM 让宠物说话
+// 流程:desktopCapturer 截取所有屏幕 → 分别 POST 到小智视觉接口(8003)
+//       → 合并每块屏幕的描述 → 作为 prompt 发给小智 LLM 让伙伴说话
 // 隐私:截屏会发送到智谱服务器,默认关闭,需用户在设置显式开启。
 let visionTimer = null
-// 对话是否进行中(宠物正在说话,或刚收到用户输入正在思考)。
-// 定时看屏幕的主动搭话必须避开对话进行中的时刻,否则会打断当前对话。
+let visionCheckInFlight = false
+let visionSilenceHandled = false
+let silenceGeneration = 0
+let visionTimerDueAt = null
+
+function logVisionDecision(action, details = {}) {
+  console.log(`[vision][decision] ${new Date().toISOString()} ${action} ${JSON.stringify(details)}`)
+}
+// 对话是否进行中(伙伴正在说话,或刚收到用户输入正在思考)。
+// 未回复触发的主动搭话必须避开对话进行中的时刻,否则会打断当前对话。
 let conversationActive = false
 let conversationActiveTimer = null
 // 用户发消息后,AI 还没开始说话的"思考期"也算对话进行中,超时后自动解除。
 const CONVERSATION_THINKING_TIMEOUT_MS = 12000
 
 // 标记对话开始(用户发消息 或 AI 开始说话)
-function markConversationActive() {
+function markConversationActive(reason = 'unknown') {
   conversationActive = true
+  logVisionDecision('对话进行中', { reason })
   if (conversationActiveTimer) clearTimeout(conversationActiveTimer)
   conversationActiveTimer = setTimeout(() => {
     // 兜底:如果迟迟没等到 tts stop(网络异常/服务端没回),超时自动解除
-    conversationActive = false
-    conversationActiveTimer = null
+    markConversationIdle('thinking-timeout')
   }, CONVERSATION_THINKING_TIMEOUT_MS)
 }
 
 // 标记对话结束(AI 说完话)
-function markConversationIdle() {
+function markConversationIdle(reason = 'unknown') {
   conversationActive = false
   if (conversationActiveTimer) { clearTimeout(conversationActiveTimer); conversationActiveTimer = null }
+  // 每次伙伴说完都开始新的 20 秒等待；用户仍不回复时可以继续主动搭话。
+  visionSilenceHandled = false
+  logVisionDecision('对话结束，重新等待用户回复', { reason })
+  scheduleVisionSilenceCheck(undefined, `conversation-idle:${reason}`)
 }
 
-// 截屏并调用小智视觉接口,返回 {ok, description?}
-async function captureAndDescribe() {
+// 真实用户每发一条文字或语音消息，就开启一轮新的“等待回复”周期。
+// 伙伴说完后会再等一个完整周期；用户仍未回复时可继续主动搭话。
+function noteUserMessage() {
+  silenceGeneration++
+  visionSilenceHandled = false
+  logVisionDecision('收到真实用户消息，重置倒计时', { generation: silenceGeneration })
+  scheduleVisionSilenceCheck(undefined, 'user-message')
+}
+
+// 截取所有显示器并分别调用小智视觉接口,返回合并后的描述。
+async function captureAndDescribe(source = 'manual') {
   try {
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
-      thumbnailSize: { width: 1280, height: 720 }
+      // 提高分辨率，便于视觉模型识别窗口标题、代码、错误信息和页面文字。
+      thumbnailSize: { width: 1920, height: 1080 }
     })
     if (!sources.length) return { ok: false, error: '无法获取屏幕' }
-    const thumb = sources[0].thumbnail
-    const jpegBuffer = thumb.toJPEG(70) // 质量 70,平衡清晰度与体积
-    if (!jpegBuffer || jpegBuffer.length === 0) return { ok: false, error: '截屏为空' }
+    logVisionDecision('已获取屏幕源', {
+      count: sources.length,
+      screens: sources.map((screenSource, index) => ({
+        index: index + 1,
+        name: screenSource.name,
+        displayId: screenSource.display_id || null
+      }))
+    })
 
-    // POST multipart 到小智视觉接口(用 web_test_client 跳过本地 token 认证)
-    const description = await postVisionExplain(jpegBuffer)
-    if (!description) return { ok: false, error: '视觉识别无结果' }
-    return { ok: true, description }
+    const screenshots = sources.map((screenSource, index) => ({
+      index,
+      name: screenSource.name || `屏幕 ${index + 1}`,
+      jpegBuffer: screenSource.thumbnail.toJPEG(80)
+    }))
+    if (screenshots.some(({ jpegBuffer }) => !jpegBuffer || jpegBuffer.length === 0)) {
+      return { ok: false, error: '有屏幕截图为空' }
+    }
+
+    // 现有视觉接口每次只接收一张图；并行识别所有屏幕，避免串行请求让等待时间随屏幕数翻倍。
+    const descriptions = await Promise.all(screenshots.map(({ jpegBuffer, index, name }) => (
+      postVisionExplain(jpegBuffer, { index, total: screenshots.length, name })
+    )))
+    const failedIndex = descriptions.findIndex(description => !description)
+    if (failedIndex >= 0) {
+      return { ok: false, error: `屏幕 ${failedIndex + 1} 视觉识别无结果` }
+    }
+
+    const description = descriptions.map((text, index) => (
+      `屏幕 ${index + 1}（${screenshots[index].name}）：${text}`
+    )).join('\n')
+    console.log(`[vision] 已识别 ${screenshots.length} 块屏幕: ${description}`)
+    const previousDescription = lastVisionDescription
+    persistHistory({
+      category: 'vision',
+      role: 'observation',
+      source,
+      text: description
+    })
+    lastVisionDescription = description
+    return {
+      ok: true,
+      description,
+      previousDescription,
+      screenCount: screenshots.length,
+      screenNames: screenshots.map(screenshot => screenshot.name)
+    }
   } catch (e) {
     return { ok: false, error: e.message || '截屏失败' }
   }
 }
 
-// 构造 multipart/form-data 并 POST 到 8003 视觉接口
-function postVisionExplain(jpegBuffer) {
+// 构造 multipart/form-data 并 POST 单块屏幕到 8003 视觉接口
+function postVisionExplain(jpegBuffer, screenInfo = {}) {
   return new Promise((resolve) => {
+    const startedAt = Date.now()
+    let settled = false
+    const logResult = (result, details = {}) => {
+      if (settled) return
+      settled = true
+      logVisionDecision(result ? '单屏视觉识别成功' : '单屏视觉识别失败', {
+        screen: Number.isFinite(screenInfo.index) ? screenInfo.index + 1 : null,
+        name: screenInfo.name || null,
+        durationMs: Date.now() - startedAt,
+        ...details
+      })
+      resolve(result)
+    }
     const boundary = '----ahvision' + Date.now()
-    const question = '简要描述用户当前屏幕上主要在做什么(如写代码/看视频/聊天/浏览网页等),一句话。'
+    const screenLabel = Number.isFinite(screenInfo.index)
+      ? `这是用户的第 ${screenInfo.index + 1}/${screenInfo.total} 块屏幕，显示器名称为“${screenInfo.name}”。`
+      : ''
+    const question = `${screenLabel}请仔细分析这张桌面截图，给出具体、可用于理解用户当前工作上下文的中文描述，不要只说“在写代码”“在浏览网页”之类的泛泛结论。
+请覆盖以下信息：
+1. 当前主要应用、窗口或网站，以及能辨认出的页面标题、项目名、文件名；
+2. 屏幕中央正在查看或编辑的具体内容，包括关键文字、代码主题、报错信息、对话主题、视频或文档内容；
+3. 推断用户此刻正在执行的具体任务，以及任务处于什么状态；
+4. 其它有助于伙伴自然回应的细节，例如待处理问题、明显进度、成功或失败状态。
+只描述截图中确实可见的内容，不确定的地方明确说“无法辨认”，不要凭空猜测。不要输出密码、API Key、Token、验证码、完整邮箱或其它敏感标识；如画面中出现，请用“[敏感信息已隐藏]”代替。输出一段约100至200字的纯文本。`
     // multipart body
     const parts = []
     parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="question"\r\n\r\n${question}\r\n`))
@@ -660,44 +836,56 @@ function postVisionExplain(jpegBuffer) {
     parts.push(Buffer.from(`\r\n--${boundary}--\r\n`))
     const body = Buffer.concat(parts)
 
-    const http = require('http')
-    const req = http.request({
-      hostname: '127.0.0.1',
-      port: 8003,
-      path: '/mcp/vision/explain',
-      method: 'POST',
-      headers: {
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': body.length,
-        'Client-Id': 'web_test_client',
-        'Device-Id': 'always-here-desktop'
-      }
-    }, (res) => {
+    const voice = getCurrentVoiceConfig()
+    let url
+    try {
+      url = new URL('mcp/vision/explain', voice.apiUrl)
+    } catch {
+      logResult(null, { basis: '小智 HTTP 服务地址无效' })
+      return
+    }
+    const transport = url.protocol === 'https:' ? require('https') : require('http')
+    const headers = {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': body.length,
+      'Client-Id': voice.clientId,
+      'Device-Id': voice.deviceId
+    }
+    if (voice.token) headers.Authorization = `Bearer ${voice.token}`
+    const req = transport.request(url, { method: 'POST', headers }, (res) => {
       let data = ''
       res.on('data', (c) => data += c)
       res.on('end', () => {
         try {
           const json = JSON.parse(data)
-          resolve(json.success ? json.response : null)
-        } catch { resolve(null) }
+          logResult(json.success ? json.response : null, {
+            httpStatus: res.statusCode,
+            basis: json.success ? '服务端返回视觉描述' : (json.message || '服务端返回失败')
+          })
+        } catch {
+          logResult(null, { httpStatus: res.statusCode, basis: '服务端响应不是有效 JSON' })
+        }
       })
     })
-    req.on('error', () => resolve(null))
-    req.setTimeout(15000, () => { req.destroy(); resolve(null) })
+    req.on('error', (error) => logResult(null, { basis: error.message || '网络请求失败' }))
+    req.setTimeout(15000, () => {
+      logResult(null, { basis: '单屏视觉请求超过 15 秒' })
+      req.destroy()
+    })
     req.write(body)
     req.end()
   })
 }
 
-// 一次完整的"看屏幕说话":截屏 → 描述 → 让小智基于描述生成宠物台词
+// 一次完整的"看屏幕说话":截屏 → 描述 → 让小智基于描述生成伙伴台词
 ipcMain.handle('vision-look-and-say', async () => {
-  const result = await captureAndDescribe()
+  const result = await captureAndDescribe('manual-look')
   if (!result.ok) {
     voiceEmit({ type: 'vision-error', message: result.error })
     return { ok: false, error: result.error }
   }
-  // 把屏幕描述作为 prompt 发给小智,让它以宠物口吻评论
-  const prompt = `你刚看到用户的屏幕:${result.description}。以桌面陪伴宠物的口吻,用一句话自然地评论或关心一下,不要太机械。`
+  // 把屏幕描述作为 prompt 发给小智,让它以伙伴口吻评论
+  const prompt = `你刚看到用户的屏幕:${result.description}。以桌面陪伴伙伴的口吻,用一句话自然地评论或关心一下,不要太机械。`
   const sent = await sendToXiaozhiIfConnected(prompt)
   if (sent) {
     voiceEmit({ type: 'vision-description', description: result.description })
@@ -706,20 +894,18 @@ ipcMain.handle('vision-look-and-say', async () => {
   return { ok: false, error: '未连接小智' }
 })
 
-// 定时看屏幕:AI 自主决定要不要说话(大部分时候安静)
-// 先用轻量 LLM 判断(直接调 mimo,不触发 TTS),决定说才走完整小智链路
+// 手动执行一次屏幕变化检查:AI 自主决定要不要说话(大部分时候安静)
+// 先用服务端 LLM 做纯文本判断(不触发 TTS),决定说才走完整小智链路
 ipcMain.handle('vision-check-and-maybe-say', async () => {
   // 对话进行中时不主动搭话,避免打断当前对话
   if (conversationActive) return { ok: true, decided: false, reason: 'conversation-active' }
-  const result = await captureAndDescribe()
+  const result = await captureAndDescribe('manual-check')
   if (!result.ok) return { ok: false, decided: false }
 
-  // 第一步:轻量判断 —— 直接调 mimo LLM(不经小智 TTS),问"要不要说话 + 说什么"
-  const judgePrompt = `你是桌面陪伴宠物,刚看到用户屏幕:${result.description}。
-判断现在适不适合主动搭一句话。规则:可以适度主动搭话,不用太拘谨;看到摸鱼/休息/发呆时更可以搭;只有在用户明显高度专注(如调试/开会/写关键代码)时才忍住。
-如果你决定说:直接回复要说的话(15字以内,自然不机械)。
-如果你决定不说:只回复 SILENT。`
-  const judgeResult = await askMimoLlm(judgePrompt)
+  // 第一步:轻量判断 —— 服务端只返回文本，不触发小智 TTS。
+  const judgePrompt = buildVisionChangePrompt(result.previousDescription, result.description)
+  const judgeResult = await askXiaozhiLlm(judgePrompt)
+  console.log(`[vision] 屏幕差异判断: ${judgeResult || '无结果'}`)
 
   // 决定安静 → 什么都不做,不触发任何声音/气泡
   if (!judgeResult || judgeResult.toUpperCase().includes('SILENT')) {
@@ -731,40 +917,24 @@ ipcMain.handle('vision-check-and-maybe-say', async () => {
   return { ok: said, decided: true }
 })
 
-// 直接调 mimo LLM(不经过小智服务端,不触发 TTS),返回原始文本
-// 用于"判断要不要说话"这种轻量决策
-// 注意:mimo 是推理模型,reasoning_tokens 不计入 content,max_tokens 要给足
-// (推理常消耗 200-300 tokens,给 500 保证 content 能正常输出)
-function askMimoLlm(prompt) {
-  const https = require('https')
-  const body = JSON.stringify({
-    model: MIMO_MODEL,
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 500
-  })
-  return new Promise((resolve) => {
-    const req = https.request(MIMO_CHAT_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${MIMO_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
-      }
-    }, (res) => {
-      let data = ''
-      res.on('data', (c) => data += c)
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data)
-          resolve(json.choices?.[0]?.message?.content?.trim() || null)
-        } catch { resolve(null) }
-      })
-    })
-    req.on('error', () => resolve(null))
-    req.setTimeout(15000, () => { req.destroy(); resolve(null) })
-    req.write(body)
-    req.end()
-  })
+// 轻量文本决策也由 xiaozhi-server 调用已配置的默认 LLM。
+async function askXiaozhiLlm(prompt) {
+  const body = Buffer.from(JSON.stringify({ prompt, max_tokens: 500 }))
+  const result = await requestXiaozhiApi('/api/ai/chat', body)
+  return result.success && result.text ? result.text.trim() : null
+}
+
+function buildVisionChangePrompt(previousDescription, currentDescription) {
+  return `你是桌面陪伴伙伴，需要根据两次屏幕观察的语义差异决定是否主动说话。
+上一次观察：${previousDescription || '这是首次观察，没有上一次记录。'}
+本次观察：${currentDescription}
+
+先在心里比较应用、页面、任务、内容和状态是否发生了有意义的变化。遵守以下规则：
+1. 画面基本相同，或只有时间、光标、输入进度、轻微滚动、描述措辞不同：只回复 SILENT。
+2. 用户仍在持续专注同一任务，且没有报错、完成、切换场景等明显变化：只回复 SILENT。
+3. 出现新的报错、任务完成、长时间卡住、切换到休息娱乐、会议开始或结束、重要页面变化，才考虑说话。
+4. 即使有变化，也只有确实能提供帮助、提醒或自然陪伴时才说；不要为了说话而说话。
+5. 决定说话时，直接回复一句15字以内的自然中文；决定不说时，只回复 SILENT。`
 }
 
 // 辅助:确保小智已连接后发文本
@@ -788,40 +958,132 @@ async function sendToXiaozhiIfConnected(text) {
   return send()
 }
 
-// 启停定时看屏幕
-// 注意:主进程内没有 ipcMain.invoke(那是 ipcRenderer 的方法)。
-// 这里把"启动循环"抽成普通函数,IPC handler 和开机自启都直接调用,
-// 避免之前用 ipcMain.invoke('vision-start-loop') 触发自身导致的
-// "ipcMain.invoke is not a function" 未处理 rejection。
-function startVisionLoop(intervalSeconds) {
+function buildIdleProactivePrompt(description) {
+  const screenContext = description
+    ? `你刚看到的屏幕情况：${description}`
+    : '这次没能看清用户的屏幕，不要假装知道用户正在做什么。'
+  return `用户已经有一会儿没有回复你。${screenContext}
+请结合最近的对话和当前画面，像熟悉的桌面伙伴一样主动发起一个自然话题。可以关心进展、追问刚才的话、针对眼前任务提出具体帮助；如果没有合适的上下文，就轻松问候。你也可以按需调用可用工具进一步了解用户正在做什么。
+直接对用户说一到两句，不要提“截图”“20秒”“未回复”等机制，不要复述任何敏感信息，也不要输出分析过程。`
+}
+
+function scheduleVisionSilenceCheck(delaySeconds, reason = 'unspecified') {
   stopVisionLoop()
-  const secs = Math.max(1, Math.round(Number(intervalSeconds) || 60))
-  console.log(`[vision] 启动定时看屏幕循环:间隔 ${secs} 秒`)
-  visionTimer = setInterval(() => {
-    // 定时触发:AI 自主决定要不要说话(不打扰专注中的用户)
-    // 直接在主进程完成截屏+判断+说话,不经过渲染进程
-    const config = normalizeVisionConfig(loadConfig().vision)
-    if (!config.enabled) return
-    // 对话进行中(用户刚发消息,或宠物正在说话)时不主动搭话,避免打断当前对话
-    if (conversationActive) return
-    captureAndDescribe().then((result) => {
-      if (!result.ok) return
-      const judgePrompt = `你是桌面陪伴宠物,刚看到用户屏幕:${result.description}。
-判断现在适不适合主动搭一句话。规则:可以适度主动搭话,不用太拘谨;看到摸鱼/休息/发呆时更可以搭;只有在用户明显高度专注(如调试/开会/写关键代码)时才忍住。
-如果你决定说:直接回复要说的话(15字以内,自然不机械)。
-如果你决定不说:只回复 SILENT。`
-      askMimoLlm(judgePrompt).then((judgeResult) => {
-        if (!judgeResult || judgeResult.toUpperCase().includes('SILENT')) return
-        // 发送前最后一道检查:截屏+识别+判断是异步的,期间用户可能开始了对话
-        if (conversationActive) return
-        sendToXiaozhiIfConnected(`请直接重复这句话,不加任何其它内容:${judgeResult}`)
-      })
+  const config = normalizeVisionConfig(loadConfig().vision)
+  if (!config.enabled) {
+    logVisionDecision('不启动未回复检测', { reason, basis: '看屏幕说话未启用' })
+    return
+  }
+  if (config.inactivitySeconds <= 0) {
+    logVisionDecision('不启动未回复检测', { reason, basis: '未回复时间为 0' })
+    return
+  }
+  if (visionSilenceHandled) {
+    logVisionDecision('不重复启动倒计时', { reason, basis: '当前主动搭话正在处理' })
+    return
+  }
+  const secs = Math.max(1, Math.round(Number(delaySeconds) || config.inactivitySeconds))
+  visionTimerDueAt = Date.now() + secs * 1000
+  visionTimer = setTimeout(runVisionSilenceCheck, secs * 1000)
+  logVisionDecision('已启动未回复倒计时', {
+    reason,
+    delaySeconds: secs,
+    dueAt: new Date(visionTimerDueAt).toISOString(),
+    generation: silenceGeneration
+  })
+}
+
+async function runVisionSilenceCheck() {
+  visionTimer = null
+  visionTimerDueAt = null
+  const config = normalizeVisionConfig(loadConfig().vision)
+  logVisionDecision('未回复倒计时到期，开始判断', {
+    enabled: config.enabled,
+    inactivitySeconds: config.inactivitySeconds,
+    conversationActive,
+    visionCheckInFlight,
+    visionSilenceHandled,
+    generation: silenceGeneration
+  })
+  if (!config.enabled || config.inactivitySeconds <= 0 || visionSilenceHandled) {
+    logVisionDecision('本次不主动搭话', {
+      basis: !config.enabled
+        ? '看屏幕说话未启用'
+        : config.inactivitySeconds <= 0
+          ? '未回复时间为 0'
+          : '当前主动搭话已在处理'
     })
-  }, secs * 1000)
+    return
+  }
+
+  // 不打断正在进行的回答；等本轮回答结束后会重新开始完整倒计时。
+  if (conversationActive || visionCheckInFlight) {
+    logVisionDecision('延后主动搭话', {
+      basis: conversationActive ? '伙伴正在思考或说话' : '上一次屏幕分析尚未完成',
+      retrySeconds: 1
+    })
+    scheduleVisionSilenceCheck(1, 'busy-retry')
+    return
+  }
+
+  const generation = silenceGeneration
+  visionSilenceHandled = true
+  visionCheckInFlight = true
+  try {
+    logVisionDecision('决定主动看屏幕', {
+      basis: `用户连续 ${config.inactivitySeconds} 秒未发消息，且当前无对话、无截图任务`,
+      generation
+    })
+    const result = await captureAndDescribe('inactivity-check')
+
+    // 截图期间用户可能已经回复；这时放弃本次主动搭话，尊重新消息。
+    if (generation !== silenceGeneration || conversationActive) {
+      logVisionDecision('取消本次主动搭话', {
+        basis: generation !== silenceGeneration ? '截图期间收到了新用户消息' : '截图期间开始了新对话',
+        startGeneration: generation,
+        currentGeneration: silenceGeneration
+      })
+      return
+    }
+
+    logVisionDecision('生成主动搭话依据', result.ok
+      ? {
+          visionSucceeded: true,
+          screenCount: result.screenCount,
+          screenNames: result.screenNames,
+          descriptionChars: result.description.length
+        }
+      : {
+          visionSucceeded: false,
+          basis: result.error || '屏幕识别失败，改用通用问候'
+        })
+    const prompt = buildIdleProactivePrompt(result.ok ? result.description : '')
+    const sent = await sendToXiaozhiIfConnected(prompt)
+    logVisionDecision(sent ? '主动搭话指令已发送' : '主动搭话发送失败', {
+      connected: Boolean(voiceClient && voiceClient.isConnected),
+      usedVisionContext: result.ok,
+      generation
+    })
+    if (sent && result.ok) {
+      voiceEmit({ type: 'vision-description', description: result.description })
+    } else if (!sent && generation === silenceGeneration) {
+      // 暂时连接失败时允许稍后再试，而不是永久吃掉这一轮。
+      visionSilenceHandled = false
+      scheduleVisionSilenceCheck(config.inactivitySeconds, 'send-failed-retry')
+    }
+  } finally {
+    visionCheckInFlight = false
+  }
+}
+
+// 兼容现有 IPC 名称；机制已从固定间隔轮询改为一次性的“未回复”倒计时。
+function startVisionLoop(inactivitySeconds) {
+  visionSilenceHandled = false
+  scheduleVisionSilenceCheck(inactivitySeconds, 'vision-start')
   return { ok: true }
 }
 
-ipcMain.handle('vision-start-loop', async (_, intervalMinutes) => startVisionLoop(intervalMinutes))
+ipcMain.handle('vision-start-loop', async (_, inactivitySeconds) => startVisionLoop(inactivitySeconds))
 
 ipcMain.handle('vision-stop-loop', async () => {
   stopVisionLoop()
@@ -829,10 +1091,12 @@ ipcMain.handle('vision-stop-loop', async () => {
 })
 
 function stopVisionLoop() {
-  if (visionTimer) { clearInterval(visionTimer); visionTimer = null }
+  if (visionTimer) { clearTimeout(visionTimer); visionTimer = null }
+  visionTimerDueAt = null
 }
 
 app.whenReady().then(() => {
+  console.log(`[history] 对话与屏幕观察记录: ${HISTORY_PATH}`)
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.always-here.app')
   }
@@ -848,12 +1112,11 @@ app.whenReady().then(() => {
   // 注册全局快捷键唤醒语音对话
   registerVoiceShortcut()
 
-  // 启动看屏幕定时循环(若已启用)
-  // 直接调用 startVisionLoop,不要用 ipcMain.invoke(主进程没有这个方法)。
+  // 启动“用户未回复”检测(若已启用)。
   const initConfig = loadConfig()
   const visionCfg = normalizeVisionConfig(initConfig.vision)
-  if (visionCfg.enabled && visionCfg.autoIntervalSeconds > 0) {
-    startVisionLoop(visionCfg.autoIntervalSeconds)
+  if (visionCfg.enabled && visionCfg.inactivitySeconds > 0) {
+    startVisionLoop(visionCfg.inactivitySeconds)
   }
 
   // 初始化更新检查

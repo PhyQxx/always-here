@@ -117,7 +117,7 @@ export function initSettings(getConfig, saveConfig) {
     listEl.innerHTML = `
       <div class="pet-manager-loading">
         <div class="spinner"></div>
-        <span>正在加载宠物库...</span>
+        <span>正在加载伙伴库...</span>
       </div>
     `
     
@@ -128,7 +128,7 @@ export function initSettings(getConfig, saveConfig) {
     if (pets.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'pet-manager-loading'
-      empty.textContent = '未发现已安装的宠物'
+      empty.textContent = '未发现已安装的伙伴'
       listEl.appendChild(empty)
       return
     }
@@ -182,10 +182,10 @@ export function initSettings(getConfig, saveConfig) {
       deleteBtn.textContent = '删除'
       deleteBtn.onclick = async () => {
         if (pet.id === 'hina') {
-          showToast('内置宠物不能删除', 'error')
+          showToast('内置伙伴不能删除', 'error')
           return
         }
-        if (!await showConfirm(`确定要删除宠物 ${pet.displayName || pet.id} 吗？`)) return
+        if (!await showConfirm(`确定要删除伙伴 ${pet.displayName || pet.id} 吗？`)) return
         const success = await window.alwaysHere.deletePet(pet.id)
         if (success) {
           showToast('已删除', 'success')
@@ -213,7 +213,7 @@ export function initSettings(getConfig, saveConfig) {
     if (!pets.length) {
       const option = document.createElement('option')
       option.value = ''
-      option.textContent = '未找到本地宠物'
+      option.textContent = '未找到本地伙伴'
       select.appendChild(option)
       select.disabled = true
       return
@@ -304,7 +304,7 @@ export function initSettings(getConfig, saveConfig) {
         window.dispatchEvent(new CustomEvent('pet-selection-changed'))
         statusEl.textContent = `已导入：${imported.displayName || imported.id}`
       } catch (error) {
-        statusEl.textContent = error.message || '导入失败，请确认宠物包是否完整。'
+        statusEl.textContent = error.message || '导入失败，请确认伙伴包是否完整。'
       } finally {
         importBtn.disabled = false
         importBtn.textContent = originalText
@@ -409,6 +409,7 @@ export function initSettings(getConfig, saveConfig) {
     const enabledEl = document.getElementById('voice-enabled')
     const autoplayEl = document.getElementById('voice-autoplay')
     const urlEl = document.getElementById('voice-server-url')
+    const apiUrlEl = document.getElementById('voice-api-url')
     const tokenEl = document.getElementById('voice-token')
     const keyEl = document.getElementById('voice-trigger-key')
     const keyHint = document.getElementById('voice-trigger-key-hint')
@@ -427,6 +428,7 @@ export function initSettings(getConfig, saveConfig) {
       enabledEl.checked = s.enabled
       if (autoplayEl) autoplayEl.checked = s.autoPlayTTS
       urlEl.value = s.serverUrl
+      if (apiUrlEl) apiUrlEl.value = s.apiUrl
       if (tokenEl) tokenEl.value = s.token
       if (keyEl) keyEl.value = s.triggerKey
       if (ttsVoiceEl) ttsVoiceEl.value = s.ttsVoice
@@ -448,6 +450,7 @@ export function initSettings(getConfig, saveConfig) {
     enabledEl.addEventListener('change', () => persist({ ...config.voice, enabled: enabledEl.checked }))
     if (autoplayEl) autoplayEl.addEventListener('change', () => persist({ ...config.voice, autoPlayTTS: autoplayEl.checked }))
     urlEl.addEventListener('change', () => persist({ ...config.voice, serverUrl: urlEl.value }))
+    if (apiUrlEl) apiUrlEl.addEventListener('change', () => persist({ ...config.voice, apiUrl: apiUrlEl.value }))
     if (tokenEl) tokenEl.addEventListener('change', () => persist({ ...config.voice, token: tokenEl.value }))
     if (keyEl) {
       keyEl.addEventListener('change', async () => {
@@ -550,12 +553,98 @@ export function initSettings(getConfig, saveConfig) {
     }
   }
 
+  function initConversationPanel() {
+    const openBtn = document.getElementById('conversation-history-open')
+    const closeBtn = document.getElementById('conversation-history-close')
+    const conversationPanel = document.getElementById('conversation-panel')
+    const rangeEl = document.getElementById('conversation-range')
+    const countEl = document.getElementById('conversation-count')
+    const listEl = document.getElementById('conversation-list')
+    const summaryBtn = document.getElementById('conversation-summary-generate')
+    const summaryEl = document.getElementById('conversation-summary')
+    if (!openBtn || !closeBtn || !conversationPanel || !rangeEl || !listEl || !summaryBtn || !summaryEl) return
+
+    function formatConversationTime(timestamp) {
+      const date = new Date(timestamp)
+      if (Number.isNaN(date.getTime())) return ''
+      return new Intl.DateTimeFormat('zh-CN', {
+        month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      }).format(date)
+    }
+
+    function renderEntries(entries) {
+      listEl.replaceChildren()
+      if (countEl) countEl.textContent = `${entries.length} 条消息`
+      if (!entries.length) {
+        const empty = document.createElement('div')
+        empty.className = 'conversation-empty'
+        empty.textContent = '这段时间还没有对话，去和伙伴聊两句吧。'
+        listEl.appendChild(empty)
+        return
+      }
+      for (const entry of entries) {
+        const item = document.createElement('article')
+        item.className = `conversation-message ${entry.role === 'user' ? 'user' : 'assistant'}`
+        const meta = document.createElement('div')
+        meta.className = 'conversation-message-meta'
+        meta.textContent = `${entry.role === 'user' ? '你' : '伙伴'} · ${formatConversationTime(entry.timestamp)}`
+        const text = document.createElement('div')
+        text.className = 'conversation-message-text'
+        text.textContent = entry.text
+        item.append(meta, text)
+        listEl.appendChild(item)
+      }
+      listEl.lastElementChild?.scrollIntoView({ block: 'end' })
+    }
+
+    async function loadEntries({ resetSummary = false } = {}) {
+      if (resetSummary) {
+        summaryEl.classList.add('hidden')
+        summaryEl.textContent = ''
+      }
+      listEl.innerHTML = '<div class="conversation-empty">正在读取对话…</div>'
+      const result = await window.alwaysHere.getConversationHistory({ days: rangeEl.value })
+      if (!result?.ok) {
+        renderEntries([])
+        showToast(result?.error || '读取对话记录失败', 'error')
+        return
+      }
+      renderEntries(result.entries || [])
+    }
+
+    openBtn.addEventListener('click', async () => {
+      conversationPanel.classList.remove('hidden')
+      window.alwaysHere.setClickThrough(false)
+      await loadEntries()
+    })
+    closeBtn.addEventListener('click', () => conversationPanel.classList.add('hidden'))
+    rangeEl.addEventListener('change', () => loadEntries({ resetSummary: true }))
+    summaryBtn.addEventListener('click', async () => {
+      const originalText = summaryBtn.textContent
+      summaryBtn.disabled = true
+      summaryBtn.textContent = '总结中…'
+      summaryEl.classList.remove('hidden')
+      summaryEl.textContent = '伙伴正在整理这段对话…'
+      try {
+        const result = await window.alwaysHere.summarizeConversation({ days: rangeEl.value })
+        if (!result?.ok) throw new Error(result?.error || 'AI 总结失败')
+        summaryEl.textContent = result.text
+      } catch (error) {
+        summaryEl.classList.add('hidden')
+        showToast(error.message || 'AI 总结失败', 'error')
+      } finally {
+        summaryBtn.disabled = false
+        summaryBtn.textContent = originalText
+      }
+    })
+  }
+
   function initVisionSettings() {
     const enabledEl = document.getElementById('vision-enabled')
-    const intervalEl = document.getElementById('vision-interval')
+    const inactivityEl = document.getElementById('vision-inactivity')
     const lookBtn = document.getElementById('vision-look-now')
     const statusEl = document.getElementById('vision-status')
-    if (!enabledEl || !intervalEl) return
+    if (!enabledEl || !inactivityEl) return
 
     const config = getConfig()
     config.vision = normalizeVisionSettings(config.vision)
@@ -563,16 +652,16 @@ export function initSettings(getConfig, saveConfig) {
     function render() {
       const s = normalizeVisionSettings(config.vision)
       enabledEl.checked = s.enabled
-      intervalEl.value = s.autoIntervalSeconds
+      inactivityEl.value = s.inactivitySeconds
     }
 
     async function persist(next) {
       config.vision = normalizeVisionSettings(next)
       render()
       await saveConfig()
-      // 同步定时循环到主进程
-      if (config.vision.enabled && config.vision.autoIntervalSeconds > 0) {
-        await window.alwaysHere.visionStartLoop(config.vision.autoIntervalSeconds)
+      // 同步“用户未回复”计时器到主进程
+      if (config.vision.enabled && config.vision.inactivitySeconds > 0) {
+        await window.alwaysHere.visionStartLoop(config.vision.inactivitySeconds)
       } else {
         await window.alwaysHere.visionStopLoop()
       }
@@ -580,7 +669,7 @@ export function initSettings(getConfig, saveConfig) {
 
     render()
     enabledEl.addEventListener('change', () => persist({ ...config.vision, enabled: enabledEl.checked }))
-    intervalEl.addEventListener('change', () => persist({ ...config.vision, autoIntervalSeconds: Number(intervalEl.value) || 0 }))
+    inactivityEl.addEventListener('change', () => persist({ ...config.vision, inactivitySeconds: Number(inactivityEl.value) || 0 }))
 
     if (lookBtn) {
       lookBtn.addEventListener('click', async () => {
@@ -762,6 +851,7 @@ export function initSettings(getConfig, saveConfig) {
   const activityPanel = initActivityPanel()
   initWagemanSettings()
   initVoiceSettings()
+  initConversationPanel()
   initVisionSettings()
 
   window.alwaysHere.onTrayCommand?.((command) => {
@@ -914,4 +1004,3 @@ function ensureReminderConfig(config) {
   }
   return config.reminders
 }
-

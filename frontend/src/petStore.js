@@ -204,7 +204,7 @@ function copyDirectoryContents(sourceDir, targetDir) {
 
 async function importCodexPetPackage(petsRoot = CODEX_PETS_DIR, zipPath, options = {}) {
   if (typeof zipPath !== 'string' || !zipPath.toLowerCase().endsWith('.zip')) {
-    throw new Error('请选择 .codex-pet.zip 或 .zip 宠物包')
+    throw new Error('请选择 .codex-pet.zip 或 .zip 伙伴包')
   }
 
   const root = path.resolve(petsRoot)
@@ -216,24 +216,24 @@ async function importCodexPetPackage(petsRoot = CODEX_PETS_DIR, zipPath, options
     await extractZip(zipPath, tempDir)
     const petRoot = findExtractedPetRoot(tempDir)
     if (!petRoot || !isInside(tempDir, petRoot)) {
-      throw new Error('没有找到有效的宠物配置 pet.json')
+      throw new Error('没有找到有效的伙伴配置 pet.json')
     }
 
     const manifest = readPetManifestDirectory(petRoot, path.basename(petRoot))
     if (!manifest) {
-      throw new Error('没有找到有效的宠物配置 pet.json')
+      throw new Error('没有找到有效的伙伴配置 pet.json')
     }
 
     const targetDir = path.join(root, manifest.id)
     if (!isInside(root, targetDir)) {
-      throw new Error('宠物包 id 不安全')
+      throw new Error('伙伴包 id 不安全')
     }
     fs.rmSync(targetDir, { recursive: true, force: true })
     copyDirectoryContents(petRoot, targetDir)
 
     const imported = readPetManifest(root, manifest.id)
     if (!imported) {
-      throw new Error('宠物包导入失败')
+      throw new Error('伙伴包导入失败')
     }
     return {
       id: imported.id,
