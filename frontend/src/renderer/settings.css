@@ -904,6 +904,13 @@
   white-space: pre-wrap;
 }
 
+/* 总结失败时的内联提示(避免被 toast 遮挡,直接在面板内可见) */
+.conversation-ai-summary.is-error {
+  border-color: rgba(220, 53, 69, 0.45);
+  background: rgba(220, 53, 69, 0.12);
+  color: rgba(255, 200, 200, 0.95);
+}
+
 .conversation-list {
   display: flex;
   flex-direction: column;

@@ -153,7 +153,9 @@ body.theme-sakura { --bg: rgba(60, 20, 40, 0.75); --bg-solid: rgba(60, 20, 40, 0
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 10000;
+  /* 必须高于所有面板(设置面板 10001 / 对话记录面板 10002),
+     否则错误提示会被遮挡,表现为"点击无反应" */
+  z-index: 10010;
   display: flex;
   flex-direction: column;
   gap: 10px;

@@ -36,3 +36,4 @@ yarn-error.log*
 .electron-builder.env
 /package-lock.json
 /frontend/package-lock.json
+/.zcode/**

@@ -600,6 +600,7 @@ export function initSettings(getConfig, saveConfig) {
     async function loadEntries({ resetSummary = false } = {}) {
       if (resetSummary) {
         summaryEl.classList.add('hidden')
+        summaryEl.classList.remove('is-error')
         summaryEl.textContent = ''
       }
       listEl.innerHTML = '<div class="conversation-empty">正在读取对话…</div>'
@@ -623,14 +624,18 @@ export function initSettings(getConfig, saveConfig) {
       const originalText = summaryBtn.textContent
       summaryBtn.disabled = true
       summaryBtn.textContent = '总结中…'
-      summaryEl.classList.remove('hidden')
+      summaryEl.classList.remove('hidden', 'is-error')
       summaryEl.textContent = '伙伴正在整理这段对话…'
       try {
         const result = await window.alwaysHere.summarizeConversation({ days: rangeEl.value })
         if (!result?.ok) throw new Error(result?.error || 'AI 总结失败')
+        summaryEl.classList.remove('is-error')
         summaryEl.textContent = result.text
       } catch (error) {
-        summaryEl.classList.add('hidden')
+        // 在面板内直接展示错误(顶部 toast 可能被本面板遮挡),便于用户看到原因
+        summaryEl.classList.remove('hidden')
+        summaryEl.classList.add('is-error')
+        summaryEl.textContent = error.message || 'AI 总结失败'
         showToast(error.message || 'AI 总结失败', 'error')
       } finally {
         summaryBtn.disabled = false

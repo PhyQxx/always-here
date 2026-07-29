@@ -670,8 +670,15 @@ ipcMain.handle('conversation-history', async (_, options = {}) => {
 })
 
 ipcMain.handle('conversation-summary', async (_, options = {}) => {
+  const dbg = (msg) => {
+    const line = `[${new Date().toISOString()}] ${msg}\n`
+    console.log('[summary]', msg)
+    try { fs.appendFileSync(path.join(app.getPath('userData'), 'summary-debug.log'), line) } catch {}
+  }
+  dbg('收到请求 options=' + JSON.stringify(options))
   try {
     const entries = getConversationHistory({ ...options, limit: 500 })
+    dbg('读取到对话条数: ' + entries.length)
     if (!entries.length) return { ok: false, error: '当前范围内暂无对话' }
     const transcript = entries.map((entry) => {
       const speaker = entry.role === 'user' ? '用户' : '伙伴'
@@ -682,11 +689,14 @@ ipcMain.handle('conversation-summary', async (_, options = {}) => {
       prompt: `请总结下面这段用户与桌面伙伴的对话。按“聊了什么、用户状态与偏好、待办或值得记住的事”组织；没有内容的栏目可省略。\n\n${transcript}`,
       max_tokens: 700
     }))
+    dbg('开始请求小智 /api/ai/chat, transcript 长度=' + transcript.length)
     const result = await requestXiaozhiApi('/api/ai/chat', body)
+    dbg('小智返回: ' + JSON.stringify(result).slice(0, 200))
     return result.success && result.text
       ? { ok: true, text: result.text }
       : { ok: false, error: result.message || 'AI 总结失败' }
   } catch (error) {
+    dbg('异常: ' + (error && error.stack ? error.stack : String(error)))
     return { ok: false, error: error.message || 'AI 总结失败' }
   }
 })
