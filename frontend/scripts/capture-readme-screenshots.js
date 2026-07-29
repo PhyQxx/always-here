@@ -11,8 +11,8 @@ function wait(ms) {
 
 async function prepareWindow() {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 900,
+    width: 1440,
+    height: 1024,
     show: false,
     backgroundColor: '#111827',
     webPreferences: {
@@ -34,11 +34,9 @@ async function prepareWindow() {
   await win.loadFile(path.join(root, 'src', 'renderer', 'index.html'))
   await wait(1400)
   await win.webContents.executeJavaScript(`
-    document.body.style.background =
-      'radial-gradient(circle at 20% 20%, rgba(124,111,247,.28), transparent 28%),' +
-      'linear-gradient(135deg, #101827 0%, #172033 48%, #243044 100%)';
-    document.body.style.width = '1280px';
-    document.body.style.height = '900px';
+    document.body.style.background = document.body.classList.contains('theme-cozy') ? '#e9e1dc' : '#111426';
+    document.body.style.width = '1440px';
+    document.body.style.height = '1024px';
   `)
   return win
 }
@@ -55,6 +53,24 @@ async function main() {
 
   const win = await prepareWindow()
   await screenshot(win, 'overview.png')
+  await screenshot(win, 'overview-cozy.png')
+
+  await win.webContents.executeJavaScript(`
+    document.querySelector('[data-theme="ambient"]')?.click();
+    document.body.style.background = '#111426';
+  `)
+  await screenshot(win, 'overview-ambient.png')
+
+  await win.webContents.executeJavaScript(`
+    document.querySelector('[data-theme="neo"]')?.click();
+    document.body.style.background = '#17131d';
+  `)
+  await screenshot(win, 'overview-neo.png')
+
+  await win.webContents.executeJavaScript(`
+    document.querySelector('[data-theme="cozy"]')?.click();
+    document.body.style.background = '#e9e1dc';
+  `)
 
   await win.webContents.executeJavaScript(`
     document.getElementById('settings-panel')?.classList.add('hidden');
@@ -70,6 +86,7 @@ async function main() {
   await win.webContents.executeJavaScript(`
     document.getElementById('settings-panel')?.classList.add('hidden');
     window.dispatchEvent(new Event('readme-show-settings'));
+    document.querySelector('.settings-tab[data-tab="system"]')?.click();
   `)
   await screenshot(win, 'global-settings.png')
 

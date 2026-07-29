@@ -1,30 +1,30 @@
 #widget-note {
-  width: 240px;
+  width: 280px;
   cursor: grab;
-  padding: 10px 14px;
+  padding: 18px;
 }
 
 .note-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 12px;
 }
 
 .note-title {
-  font-size: 11px;
-  opacity: 0.5;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .note-body {
   width: 100%;
-  min-height: 100px;
+  min-height: 118px;
   max-height: 240px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -41,9 +41,9 @@
 #note-viewer {
   width: 100%;
   min-height: 100px;
-  padding: 8px;
-  font-size: 13px;
-  line-height: 1.5;
+  padding: 13px;
+  font-size: 14px;
+  line-height: 1.65;
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-all;
@@ -56,14 +56,19 @@
   background: transparent;
   border: none;
   color: var(--text);
-  padding: 8px;
-  font-size: 13px;
+  padding: 13px;
+  font-size: 14px;
   font-family: inherit;
   line-height: 1.5;
   resize: none;
   outline: none;
   display: block;
 }
+
+.theme-cozy #widget-note { transform: rotate(0.45deg); }
+.theme-cozy #widget-note:hover { transform: rotate(0) translateY(-2px); }
+.theme-neo #widget-note { border-width: 2px; }
+.theme-neo .note-title { color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; }
 
 /* Task List Styles */
 .task-item {

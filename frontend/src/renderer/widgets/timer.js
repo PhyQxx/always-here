@@ -16,6 +16,10 @@ let timerState = {
 let getConfigFn = null
 let saveConfigFn = null
 
+function getStartLabel() {
+  return timerState.mode === 'pomodoro' ? '开始专注' : '开始'
+}
+
 function formatTime(ms, includeMs = true) {
   const totalSec = Math.max(0, ms / 1000)
   const min = Math.floor(totalSec / 60)
@@ -49,7 +53,12 @@ function updateTimerDisplay() {
     }
     display.textContent = formatTime(current, false)
     phaseIndicator.classList.remove('hidden')
-    phaseIndicator.textContent = timerState.phase === 'work' ? '专注中' : '休息中'
+    const timerSettings = getConfigFn().widgets.timer
+    phaseIndicator.textContent = timerState.running
+      ? (timerState.phase === 'work' ? '专注中' : '休息中')
+      : (timerState.phase === 'work'
+          ? `专注 ${timerSettings.workTime || 25} 分钟`
+          : `休息 ${timerSettings.breakTime || 5} 分钟`)
     phaseIndicator.style.color = timerState.phase === 'work' ? 'var(--accent)' : '#4ade80'
   }
 
@@ -97,7 +106,7 @@ function handlePomodoroComplete() {
 
   const startBtn = document.getElementById('timer-start')
   if (startBtn) {
-    startBtn.textContent = '开始'
+    startBtn.textContent = getStartLabel()
     startBtn.classList.remove('active')
   }
   updateTimerDisplay()
@@ -110,7 +119,7 @@ async function toggleMode() {
     cancelAnimationFrame(timerState.rafId)
     const startBtn = document.getElementById('timer-start')
     if (startBtn) {
-      startBtn.textContent = '开始'
+      startBtn.textContent = getStartLabel()
       startBtn.classList.remove('active')
     }
   }
@@ -139,7 +148,7 @@ function resetTimer() {
 
   const startBtn = document.getElementById('timer-start')
   if (startBtn) {
-    startBtn.textContent = '开始'
+    startBtn.textContent = getStartLabel()
     startBtn.classList.remove('active')
   }
   
@@ -165,6 +174,9 @@ function updateUIForMode() {
   if (lapsEl) {
     lapsEl.classList.toggle('hidden', timerState.mode === 'pomodoro')
   }
+
+  const startBtn = document.getElementById('timer-start')
+  if (startBtn && !timerState.running) startBtn.textContent = getStartLabel()
   
   updateTimerDisplay()
 }
@@ -209,7 +221,7 @@ export function initTimer(getConfig, saveConfig) {
         timerState.remaining -= performance.now() - timerState.startTime
       }
       cancelAnimationFrame(timerState.rafId)
-      startBtn.textContent = '继续'
+      startBtn.textContent = timerState.mode === 'pomodoro' ? '继续专注' : '继续'
       startBtn.classList.remove('active')
     }
   })

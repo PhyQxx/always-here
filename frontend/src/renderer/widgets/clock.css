@@ -1,20 +1,37 @@
 #widget-clock {
-  padding: 16px 28px;
-  border-radius: 20px;
+  min-width: 250px;
+  padding: 22px 26px 20px;
   cursor: grab;
 }
 
+#widget-clock::before {
+  content: 'ALWAYS HERE';
+  display: block;
+  margin-bottom: 14px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.18em;
+}
+
 .clock-time {
-  font-size: 48px;
-  font-weight: 300;
-  letter-spacing: 2px;
-  text-align: center;
-  line-height: 1.1;
+  font-size: clamp(44px, 4vw, 58px);
+  font-weight: 420;
+  letter-spacing: -0.045em;
+  text-align: left;
+  line-height: 0.96;
+  font-variant-numeric: tabular-nums;
 }
 
 .clock-date {
-  font-size: 14px;
-  text-align: center;
-  opacity: 0.7;
-  margin-top: 4px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-muted);
+  margin-top: 12px;
+  letter-spacing: 0.04em;
 }
+
+.theme-cozy #widget-clock::before { content: '今天也在陪你'; letter-spacing: 0.08em; }
+.theme-neo #widget-clock { border-width: 2px; }
+.theme-neo #widget-clock::before { color: var(--secondary); }
+.theme-neo .clock-time { font-weight: 800; letter-spacing: -0.055em; }

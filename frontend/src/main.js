@@ -34,16 +34,16 @@ function persistHistory(entry) {
 const DEFAULT_CONFIG = {
   configVersion: 1,
   widgets: {
-    clock: { enabled: true, x: 50, y: 50 },
-    pet: { enabled: true, x: 300, y: 400 },
-    timer: { enabled: true, x: 50, y: 200 },
-    note: { enabled: true, x: 600, y: 50 },
-    wageman: { enabled: true, x: 600, y: 350 }
+    clock: { enabled: true, x: 72, y: 58 },
+    pet: { enabled: true, x: 560, y: 410 },
+    timer: { enabled: true, x: 72, y: 560 },
+    note: { enabled: true, x: 920, y: 78 },
+    wageman: { enabled: true, x: 900, y: 550 }
   },
   alwaysOnTop: true,
   opacity: 1.0,
   globalScale: 1.0,
-  theme: 'dark',
+  theme: 'cozy',
   autoStart: false,
   petId: 'hina',
   petFolderPath: CODEX_PETS_DIR,

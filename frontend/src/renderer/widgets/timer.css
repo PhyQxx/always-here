@@ -1,6 +1,6 @@
 #widget-timer {
-  padding: 14px 20px;
-  min-width: 180px;
+  padding: 18px;
+  min-width: 268px;
   cursor: grab;
 }
 
@@ -8,12 +8,12 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
-  font-size: 11px;
+  margin-bottom: 14px;
+  font-size: 12px;
 }
 
 .timer-mode-indicator {
-  opacity: 0.6;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 4px;
@@ -21,7 +21,7 @@
 }
 
 .timer-mode-indicator:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-soft);
   opacity: 1;
 }
 
@@ -32,34 +32,48 @@
 }
 
 .timer-display {
-  font-size: 32px;
-  font-weight: 300;
-  text-align: center;
+  font-size: 42px;
+  font-weight: 560;
+  text-align: left;
   font-variant-numeric: tabular-nums;
   letter-spacing: 1px;
-  margin-bottom: 8px;
+  letter-spacing: -0.035em;
+  margin-bottom: 16px;
 }
 
 .timer-buttons {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
 }
 
 .timer-btn {
-  padding: 4px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
   color: var(--text);
   cursor: pointer;
   font-size: 12px;
-  transition: background 0.2s;
+  font-weight: 650;
+  transition: background 0.2s, transform 0.2s, border-color 0.2s;
 }
 
 .timer-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
+
+.timer-btn:active { transform: scale(0.97); }
+
+#timer-start {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+#timer-start:hover { background: var(--accent-strong); }
 
 .timer-btn.active {
   background: var(--accent);
@@ -73,6 +87,10 @@
   font-size: 12px;
   opacity: 0.7;
 }
+
+.theme-cozy #timer-start { box-shadow: 0 8px 18px rgba(var(--accent-rgb), 0.2); }
+.theme-neo #widget-timer { border-width: 2px; }
+.theme-neo #timer-start { color: #211b29; font-weight: 800; }
 
 .timer-laps::-webkit-scrollbar {
   width: 3px;

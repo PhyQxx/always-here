@@ -15,7 +15,7 @@ const config = {
     wageman: { enabled: true, x: 760, y: 455 }
   },
   alwaysOnTop: true,
-  theme: 'dark',
+  theme: 'cozy',
   petId: 'hina',
   petFolderPath: path.join(root, 'src', 'renderer', 'assets', 'pets'),
   reminders: {
@@ -26,6 +26,7 @@ const config = {
   },
   happiness: 82,
   noteText: '今天先完成一个小目标。\n\n记得喝水、保存进度，也给自己留一点喘气的空间。',
+  noteTranslucent: false,
   activityLog: [],
   wageman: {
     clockIn: '09:00',
@@ -63,6 +64,7 @@ contextBridge.exposeInMainWorld('alwaysHere', {
   choosePetFolder: async () => null,
   showNotification: async () => false,
   onShowSettings: (callback) => window.addEventListener('readme-show-settings', callback),
+  onVoiceEvent: () => {},
   fetchHolidays: async () => null,
   getAppVersion: async () => packageJson.version,
   checkHotUpdate: async () => ({ success: true })

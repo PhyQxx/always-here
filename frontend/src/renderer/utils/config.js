@@ -8,11 +8,11 @@ import { PET_EVENTS } from './events.mjs'
 let config = null
 
 const DEFAULT_WIDGETS = {
-  clock: { enabled: true, x: 50, y: 50 },
-  pet: { enabled: true, x: 300, y: 400 },
-  timer: { enabled: true, x: 50, y: 200, mode: 'pomodoro', workTime: 25, breakTime: 5 },
-  note: { enabled: true, x: 600, y: 50 },
-  wageman: { enabled: true, x: 600, y: 350 }
+  clock: { enabled: true, x: 72, y: 58 },
+  pet: { enabled: true, x: 560, y: 410 },
+  timer: { enabled: true, x: 72, y: 560, mode: 'pomodoro', workTime: 25, breakTime: 5 },
+  note: { enabled: true, x: 920, y: 78 },
+  wageman: { enabled: true, x: 900, y: 550 }
 }
 
 const CURRENT_CONFIG_VERSION = 1
@@ -25,7 +25,13 @@ export async function initConfig() {
   for (const key in DEFAULT_WIDGETS) {
     config.widgets[key] = { ...DEFAULT_WIDGETS[key], ...(config.widgets[key] || {}) }
   }
-  if (!config.theme) config.theme = 'dark'
+  const legacyThemes = {
+    dark: 'ambient',
+    ocean: 'ambient',
+    forest: 'cozy',
+    sakura: 'cozy'
+  }
+  config.theme = legacyThemes[config.theme] || config.theme || 'cozy'
   if (!config.petId) config.petId = 'hina'
   if (!config.petFolderPath) config.petFolderPath = ''
   // 提醒默认值统一来自 petReminders.mjs 的 normalizeReminders(单一数据源)
@@ -37,6 +43,7 @@ export async function initConfig() {
   if (config.happiness === undefined) config.happiness = 70
   if (!config.noteText) config.noteText = ''
   if (!Array.isArray(config.activityLog)) config.activityLog = []
+  if (!config.themeLayouts || typeof config.themeLayouts !== 'object') config.themeLayouts = {}
 
   if (config.configVersion !== CURRENT_CONFIG_VERSION) {
     config.configVersion = CURRENT_CONFIG_VERSION
@@ -79,6 +86,10 @@ export function applyWidgetPositions() {
     if (!el) continue
     const w = config.widgets[key]
     el.classList.toggle('hidden', !w.enabled)
+    const maxX = Math.max(16, window.innerWidth - Math.max(el.offsetWidth, 120) - 16)
+    const maxY = Math.max(16, window.innerHeight - Math.max(el.offsetHeight, 100) - 16)
+    w.x = Math.max(16, Math.min(Number(w.x) || 16, maxX))
+    w.y = Math.max(16, Math.min(Number(w.y) || 16, maxY))
     el.style.left = w.x + 'px'
     el.style.top = w.y + 'px'
     const check = document.getElementById('setting-' + key)
@@ -89,9 +100,14 @@ export function applyWidgetPositions() {
 }
 
 export function applyTheme() {
-  document.body.className = config.theme ? 'theme-' + config.theme : ''
+  const theme = ['ambient', 'cozy', 'neo'].includes(config.theme) ? config.theme : 'cozy'
+  config.theme = theme
+  document.body.className = 'theme-' + theme
+  document.documentElement.dataset.theme = theme
   document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.theme === (config.theme || 'dark'))
+    const active = btn.dataset.theme === theme
+    btn.classList.toggle('active', active)
+    btn.setAttribute('aria-pressed', String(active))
   })
 }
 

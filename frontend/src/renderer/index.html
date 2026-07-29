@@ -50,7 +50,7 @@
 
   <div id="widget-note" class="widget" data-widget="note">
     <div class="note-header">
-      <span class="note-title">便签 / 待办</span>
+      <span class="note-title">随手记</span>
     </div>
     <div class="note-body">
       <div id="note-viewer" class="note-content"></div>
@@ -380,25 +380,21 @@
           </div>
         </div>
 
-        <div class="settings-section-title" data-settings-scope="global">视觉主题</div>
-        <div class="setting-row" data-settings-scope="global">
-          <div class="theme-options">
-            <div class="theme-item" data-theme="dark">
-              <button class="theme-btn" data-theme="dark">🌙</button>
-              <span>深色</span>
-            </div>
-            <div class="theme-item" data-theme="ocean">
-              <button class="theme-btn" data-theme="ocean">🌊</button>
-              <span>海洋</span>
-            </div>
-            <div class="theme-item" data-theme="forest">
-              <button class="theme-btn" data-theme="forest">🌲</button>
-              <span>森林</span>
-            </div>
-            <div class="theme-item" data-theme="sakura">
-              <button class="theme-btn" data-theme="sakura">🌸</button>
-              <span>樱花</span>
-            </div>
+        <div class="settings-section-title" data-settings-scope="global">外观模式</div>
+        <div class="setting-row visual-mode-row" data-settings-scope="global">
+          <div class="theme-options" role="group" aria-label="外观模式">
+            <button type="button" class="theme-btn" data-theme="ambient" aria-pressed="false">
+              <span class="theme-preview theme-preview-ambient" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="theme-copy"><strong>深夜氛围</strong><small>安静、通透、专注</small></span>
+            </button>
+            <button type="button" class="theme-btn" data-theme="cozy" aria-pressed="false">
+              <span class="theme-preview theme-preview-cozy" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="theme-copy"><strong>暖光手账</strong><small>柔和、轻盈、治愈</small></span>
+            </button>
+            <button type="button" class="theme-btn" data-theme="neo" aria-pressed="false">
+              <span class="theme-preview theme-preview-neo" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="theme-copy"><strong>潮流像素</strong><small>醒目、利落、有趣</small></span>
+            </button>
           </div>
         </div>
 
@@ -520,6 +516,7 @@
     </div>
   </div>
 
-  <script type="module" src="index.js"></script>
+  <script src="browser-preview.js"></script>
+  <script type="module" src="index.js?v=2"></script>
 </body>
 </html>

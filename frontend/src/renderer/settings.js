@@ -1002,11 +1002,65 @@ export function initSettings(getConfig, saveConfig) {
 
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      getConfig().theme = btn.dataset.theme
+      const config = getConfig()
+      const nextTheme = btn.dataset.theme
+      if (config.theme === nextTheme) return
+
+      config.themeLayouts ||= {}
+      config.themeLayouts[config.theme] = snapshotWidgetPositions(config)
+      const nextLayout = config.themeLayouts[nextTheme] || getRecommendedLayout(nextTheme)
+      Object.entries(nextLayout).forEach(([key, position]) => {
+        if (!config.widgets[key]) return
+        config.widgets[key].x = position.x
+        config.widgets[key].y = position.y
+      })
+      config.theme = nextTheme
       applyTheme()
+      applyWidgetPositions()
       saveConfig()
     })
   })
+
+  function snapshotWidgetPositions(config) {
+    return Object.fromEntries(
+      Object.entries(config.widgets).map(([key, widget]) => [key, { x: widget.x, y: widget.y }])
+    )
+  }
+
+  function getRecommendedLayout(theme) {
+    const width = window.innerWidth
+    const height = window.innerHeight
+    const clampX = value => Math.max(24, Math.min(width - 320, Math.round(value)))
+    const clampY = value => Math.max(24, Math.min(height - 250, Math.round(value)))
+    const layouts = {
+      ambient: {
+        clock: { x: 72, y: 58 },
+        note: { x: width - 360, y: 78 },
+        timer: { x: 72, y: height - 300 },
+        pet: { x: width * 0.5 - 65, y: height * 0.52 },
+        wageman: { x: width - 350, y: height - 290 }
+      },
+      cozy: {
+        clock: { x: 42, y: 72 },
+        wageman: { x: 42, y: 360 },
+        pet: { x: width * 0.5 - 65, y: height * 0.58 },
+        timer: { x: width - 320, y: 70 },
+        note: { x: width - 350, y: 430 }
+      },
+      neo: {
+        clock: { x: 48, y: 70 },
+        wageman: { x: width * 0.5 - 115, y: 70 },
+        pet: { x: width * 0.5 - 65, y: height * 0.43 },
+        note: { x: width - 340, y: 180 },
+        timer: { x: width * 0.5 - 120, y: height - 250 }
+      }
+    }
+
+    return Object.fromEntries(
+      Object.entries(layouts[theme] || layouts.ambient)
+        .map(([key, position]) => [key, { x: clampX(position.x), y: clampY(position.y) }])
+    )
+  }
 
   const scaleInput = document.getElementById('setting-global-scale')
   const scaleVal = document.getElementById('setting-global-scale-val')

@@ -1,4 +1,4 @@
-import { initConfig, getConfig, saveConfig, applyAll } from './utils/config.js'
+import { initConfig, getConfig, saveConfig, applyAll, applyWidgetPositions } from './utils/config.js'
 import { initClickThrough, makeDraggable } from './utils/drag.js'
 import { initClock } from './widgets/clock.js'
 import { initPet } from './widgets/pet.js'
@@ -42,6 +42,21 @@ async function init() {
   })
 
   await safeInit('settings', () => initSettings(getConfig, saveConfig))
+
+  // 部分挂件会在初始化后因动态文案变宽；二次贴边避免小屏或分辨率变化时溢出。
+  requestAnimationFrame(() => applyWidgetPositions())
+  setTimeout(() => applyWidgetPositions(), 500)
+  const widgetSizeObserver = new ResizeObserver(() => applyWidgetPositions())
+  WIDGET_KEYS.forEach(key => {
+    const el = document.getElementById('widget-' + key)
+    if (el) widgetSizeObserver.observe(el)
+  })
+  let resizeSaveTimer = null
+  window.addEventListener('resize', () => {
+    applyWidgetPositions()
+    clearTimeout(resizeSaveTimer)
+    resizeSaveTimer = setTimeout(() => saveConfig(), 180)
+  })
 }
 
 init()
