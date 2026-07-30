@@ -507,11 +507,12 @@ function voiceDisconnect() {
   opusDecoder.destroy()
 }
 
-// ── 断线自动重连(指数退避) ──
+// ── 断线自动重连(指数退避 + 上限) ──
 let voiceManualDisconnect = false
 let reconnectTimer = null
 let reconnectAttempt = 0
 const RECONNECT_DELAYS = [2000, 3000, 5000, 8000, 15000] // 指数退避,最长 15s
+const MAX_RECONNECT_ATTEMPTS = 20 // G1:约 5 分钟后放弃,避免服务端长期不可用时无限重试
 
 function resetReconnect() {
   reconnectAttempt = 0
@@ -524,6 +525,17 @@ function scheduleReconnect() {
   const config = loadConfig()
   if (!normalizeVoiceConfig(config.voice).enabled) return
   if (reconnectTimer) return // 已有重连在排队
+
+  // G1:超过最大重连次数,停止重试并通知用户(不再无限刷屏重连)
+  if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+    voiceEmit({
+      type: 'status',
+      state: 'reconnect-given-up',
+      message: `已连续重连 ${reconnectAttempt} 次仍失败,已停止。请检查服务端后重新开启语音。`
+    })
+    reconnectAttempt = 0
+    return
+  }
 
   const delay = RECONNECT_DELAYS[Math.min(reconnectAttempt, RECONNECT_DELAYS.length - 1)]
   reconnectAttempt++

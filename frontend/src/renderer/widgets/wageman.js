@@ -11,6 +11,8 @@ let domRefs = {}
 // F7:今天是否工作日的缓存(避免每秒 updateWageman 都查节假日接口)。
 // null=未知(按周一~周五兜底),true/false=已用节假日数据判定。
 let todayIsWorkday = null
+// G2:节假日数据是否成功获取。失败时降级为周一~周五,需向用户说明判断不可靠。
+let holidayDataAvailable = true
 
 function countWorkdays(year, month) {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -47,18 +49,29 @@ async function fetchHolidayWorkdays(year, month) {
 
 // F7:根据节假日数据判断"今天"是否工作日。
 // info.holiday===true 表示法定假/调休放假;===false 表示周末调休补班。
-// 无数据时按周一~周五兜底。结果缓存到 todayIsWorkday。
+// 接口失败时按周一~周五兜底,并记录 holidayDataAvailable=false 供 UI 提示。
 async function checkTodayWorkday(now = new Date()) {
   const month = now.getMonth() // 0-based
   const key = `${month + 1}-${now.getDate()}`
   try {
     const data = await window.alwaysHere.fetchHolidays(now.getFullYear())
-    if (data && data.holiday && data.holiday[key]) {
-      todayIsWorkday = !data.holiday[key].holiday
+    if (data && data.holiday) {
+      holidayDataAvailable = true
+      // 今天在节假日字典里:按 holiday 字段判定(假/调休补班)
+      if (data.holiday[key]) {
+        todayIsWorkday = !data.holiday[key].holiday
+        return
+      }
+      // 今天不在字典里:普通日子,按星期判定
+      const dow = now.getDay()
+      todayIsWorkday = dow !== 0 && dow !== 6
       return
     }
+    // 接口返回但无 holiday 字段,视为数据不可用
+    holidayDataAvailable = false
   } catch {
-    // 接口失败,走兜底
+    // 接口抛错,视为数据不可用
+    holidayDataAvailable = false
   }
   const dow = now.getDay()
   todayIsWorkday = dow !== 0 && dow !== 6
@@ -107,6 +120,13 @@ function updateWageman() {
 
   countdownEl.textContent = workStopped ? '明天见！' : state.countdownText
   earnedEl.textContent = state.earnedText
+
+  // G2:节假日数据获取失败时,在状态后标注,提醒用户"工作日判断不可靠"
+  if (!holidayDataAvailable && state.mode !== 'missing' && state.mode !== 'rest') {
+    statusEl.title = '未能获取节假日数据,按周一至周五判断工作日(法定节假日可能误判)'
+  } else {
+    statusEl.title = ''
+  }
 
   // Update Durations
   if (actualDurEl && expectedDurEl && clockIn && clockOut) {

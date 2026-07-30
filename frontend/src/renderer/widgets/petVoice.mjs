@@ -207,6 +207,9 @@ function handleVoiceEvent(event) {
     case 'status':
       if (event.state === 'reconnecting') {
         showVoiceBubble(`🔄 正在重连小智...(第 ${event.attempt} 次)`)
+      } else if (event.state === 'reconnect-given-up') {
+        // G1:重连上限到达,停止重试。提示用户手动重连。
+        showVoiceBubble(`⚠️ ${event.message || '多次重连失败,已停止。请检查服务端后重新开启语音。'}`)
       } else if (event.state === 'error') {
         showVoiceBubble(`⚠️ ${event.message || '连接出错,正在重连...'}`)
       } else if (event.state === 'disconnected') {
