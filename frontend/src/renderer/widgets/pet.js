@@ -158,12 +158,25 @@ function setBaseAction(actionName) {
   startAction(actionName, 'base')
 }
 
-function markInteraction() {
-  lastInteractionAt = Date.now()
-  // F8:同步持久化"上次互动时间",供好感度衰减使用
+// F8:lastActiveAt 落盘节流。markInteraction 会被拖拽(每帧)、mouseenter 等高频调用,
+// 若每次都全量写 config.json 会造成大量磁盘 IO。限制最多每 5 秒落盘一次,
+// 最后一次互动会在闲置或卸载时由 evaluateIdleState / pagehide 兜底写入。
+let lastActiveAtPersistAt = 0
+const LAST_ACTIVE_PERSIST_INTERVAL_MS = 5000
+
+function persistLastActiveAt(force = false) {
+  const now = Date.now()
+  if (!force && now - lastActiveAtPersistAt < LAST_ACTIVE_PERSIST_INTERVAL_MS) return
+  lastActiveAtPersistAt = now
   const config = getConfigFn()
   config.lastActiveAt = lastInteractionAt
   saveConfigFn()
+}
+
+function markInteraction() {
+  lastInteractionAt = Date.now()
+  // F8:同步持久化"上次互动时间",供好感度衰减使用(节流,避免高频拖拽频繁写盘)
+  persistLastActiveAt()
   if (baseAction === 'sleep') setBaseAction(isFocusing ? 'study' : 'idle')
 }
 
@@ -862,4 +875,7 @@ export async function initPet(getConfig, saveConfig) {
     lastDragAction = null
     startAction(baseAction, 'base')
   })
+
+  // F8:页面隐藏/关闭时强制落盘最后一次互动时间(兜底节流期间未写的 lastActiveAt)
+  window.addEventListener('pagehide', () => persistLastActiveAt(true))
 }
