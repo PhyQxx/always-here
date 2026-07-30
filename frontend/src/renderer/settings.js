@@ -626,6 +626,37 @@ export function initSettings(getConfig, saveConfig) {
     closeBtn.addEventListener('click', () => conversationPanel.classList.add('hidden'))
     rangeEl.addEventListener('change', () => loadEntries({ resetSummary: true }))
 
+    summaryBtn.addEventListener('click', async () => {
+      const originalText = summaryBtn.textContent
+      summaryBtn.disabled = true
+      summaryBtn.textContent = '总结中…'
+      summaryEl.classList.remove('hidden', 'is-error', 'md-body')
+      summaryEl.textContent = '伙伴正在整理这段对话…'
+      // 总结区在列表顶部,先滚动到顶部让用户看到"总结中"状态
+      bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
+      try {
+        const result = await window.alwaysHere.summarizeConversation({ days: rangeEl.value })
+        if (!result?.ok) throw new Error(result?.error || 'AI 总结失败')
+        summaryEl.classList.remove('is-error')
+        // 渲染 Markdown(加 md-body 取消 pre-wrap)
+        summaryEl.classList.add('md-body')
+        summaryEl.innerHTML = renderMarkdown(result.text)
+        // 生成完毕后再次确保滚动到总结区(等待时间可能让用户离开了顶部)
+        bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
+      } catch (error) {
+        // 在面板内直接展示错误(顶部 toast 可能被本面板遮挡),便于用户看到原因
+        summaryEl.classList.remove('md-body')
+        summaryEl.classList.remove('hidden')
+        summaryEl.classList.add('is-error')
+        summaryEl.textContent = error.message || 'AI 总结失败'
+        bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
+        showToast(error.message || 'AI 总结失败', 'error')
+      } finally {
+        summaryBtn.disabled = false
+        summaryBtn.textContent = originalText
+      }
+    })
+
     // 清空对话历史:确认后删除,并刷新列表
     const clearBtn = document.getElementById('conversation-clear')
     clearBtn?.addEventListener('click', async () => {
@@ -718,36 +749,6 @@ export function initSettings(getConfig, saveConfig) {
       }
       showToast(`已清空 ${result.removed || 0} 条观察记录`, 'success')
       await loadEntries()
-    })
-    summaryBtn.addEventListener('click', async () => {
-      const originalText = summaryBtn.textContent
-      summaryBtn.disabled = true
-      summaryBtn.textContent = '总结中…'
-      summaryEl.classList.remove('hidden', 'is-error', 'md-body')
-      summaryEl.textContent = '伙伴正在整理这段对话…'
-      // 总结区在列表顶部,先滚动到顶部让用户看到"总结中"状态
-      bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
-      try {
-        const result = await window.alwaysHere.summarizeConversation({ days: rangeEl.value })
-        if (!result?.ok) throw new Error(result?.error || 'AI 总结失败')
-        summaryEl.classList.remove('is-error')
-        // 渲染 Markdown(加 md-body 取消 pre-wrap)
-        summaryEl.classList.add('md-body')
-        summaryEl.innerHTML = renderMarkdown(result.text)
-        // 生成完毕后再次确保滚动到总结区(等待时间可能让用户离开了顶部)
-        bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
-      } catch (error) {
-        // 在面板内直接展示错误(顶部 toast 可能被本面板遮挡),便于用户看到原因
-        summaryEl.classList.remove('md-body')
-        summaryEl.classList.remove('hidden')
-        summaryEl.classList.add('is-error')
-        summaryEl.textContent = error.message || 'AI 总结失败'
-        bodyEl?.scrollTo({ top: 0, behavior: 'smooth' })
-        showToast(error.message || 'AI 总结失败', 'error')
-      } finally {
-        summaryBtn.disabled = false
-        summaryBtn.textContent = originalText
-      }
     })
   }
 
@@ -952,6 +953,32 @@ export function initSettings(getConfig, saveConfig) {
     breakTimeInput.addEventListener('change', saveTimerSettings)
   }
 
+  // F9:时钟设置(显示秒 / 24小时制)
+  function initClockSettings() {
+    const secondsCheckbox = document.getElementById('setting-clock-seconds')
+    const h24Checkbox = document.getElementById('setting-clock-24h')
+    if (!secondsCheckbox && !h24Checkbox) return
+
+    const config = getConfig()
+    if (!config.widgets.clock) config.widgets.clock = {}
+    const clockSettings = config.widgets.clock
+
+    if (secondsCheckbox) {
+      secondsCheckbox.checked = clockSettings.showSeconds !== false
+      secondsCheckbox.addEventListener('change', async () => {
+        clockSettings.showSeconds = secondsCheckbox.checked
+        await saveConfig()
+      })
+    }
+    if (h24Checkbox) {
+      h24Checkbox.checked = clockSettings.use24h !== false
+      h24Checkbox.addEventListener('change', async () => {
+        clockSettings.use24h = h24Checkbox.checked
+        await saveConfig()
+      })
+    }
+  }
+
   // --- Start of initSettings execution ---
 
   document.querySelectorAll('.widget').forEach(w => {
@@ -1107,11 +1134,13 @@ export function initSettings(getConfig, saveConfig) {
   initPetPackageImport()
   initReminderSettings()
   initTimerSettings()
+  initClockSettings()
   const petChatSettings = initPetChatSettings()
   const activityPanel = initActivityPanel()
   initWagemanSettings()
   initVoiceSettings()
   initConversationPanel()
+  initVisionPanel()
   initWorkReportPanel()
   initVisionSettings()
 
@@ -1171,9 +1200,9 @@ export function initSettings(getConfig, saveConfig) {
         </div>
         <div class="report-section-grid">
           <div class="report-stat">
-            <span class="stat-label">身心平衡度</span>
+            <span class="stat-label">伙伴好感度</span>
             <strong class="stat-value">${config.happiness || 0}%</strong>
-            <span class="stat-hint">${(config.happiness || 0) > 70 ? '平衡极佳' : (config.happiness || 0) > 40 ? '正常维持' : '急需休息'}</span>
+            <span class="stat-hint">${(config.happiness || 0) > 80 ? '关系亲密' : (config.happiness || 0) > 40 ? '渐渐熟悉' : '有点想念你'}</span>
           </div>
           <div class="report-stat">
             <span class="stat-label">本周专注时长</span>

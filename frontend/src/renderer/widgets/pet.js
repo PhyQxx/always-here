@@ -21,7 +21,9 @@ import {
 } from './petReminderBubble.mjs'
 import {
   calculateHappiness,
-  getMoodLevel
+  getMoodLevel,
+  applyHappinessDecay,
+  HAPPINESS_IMPACT
 } from './petHappiness.mjs'
 import {
   PET_CHAT_BUBBLE_DURATION_MS,
@@ -158,7 +160,51 @@ function setBaseAction(actionName) {
 
 function markInteraction() {
   lastInteractionAt = Date.now()
+  // F8:同步持久化"上次互动时间",供好感度衰减使用
+  const config = getConfigFn()
+  config.lastActiveAt = lastInteractionAt
+  saveConfigFn()
   if (baseAction === 'sleep') setBaseAction(isFocusing ? 'study' : 'idle')
+}
+
+// F8:用户主动互动(对话/点击)给少量好感,带每日上限,避免刷分。
+// chatDailyTally / interactDailyTally 按"日"重置,记录当天已加的好感。
+let chatDailyTally = 0
+let interactDailyTally = 0
+let happinessDayKey = ''
+const INTERACT_DAILY_CAP = 10 // 每日点击好感上限
+
+function dailyTallyKey() {
+  const d = new Date()
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+}
+
+function resetDailyTallyIfNeeded() {
+  const key = dailyTallyKey()
+  if (key !== happinessDayKey) {
+    happinessDayKey = key
+    chatDailyTally = 0
+    interactDailyTally = 0
+  }
+}
+
+function bumpHappiness(eventType) {
+  resetDailyTallyIfNeeded()
+  const config = getConfigFn()
+  const previous = config.happiness
+  const cap = HAPPINESS_IMPACT['chat-daily-cap'] || 10
+  if (eventType === 'chat') {
+    if (chatDailyTally >= cap) return
+    chatDailyTally += HAPPINESS_IMPACT['chat']
+  } else if (eventType === 'interact') {
+    if (interactDailyTally >= INTERACT_DAILY_CAP) return
+    interactDailyTally += HAPPINESS_IMPACT['interact']
+  } else {
+    return
+  }
+  config.happiness = calculateHappiness(previous, { type: eventType })
+  maybeCelebrateHappiness(previous, config.happiness)
+  saveConfigFn()
 }
 
 function evaluateIdleState(now = Date.now()) {
@@ -554,13 +600,10 @@ function startPetChatLoop() {
   const chatSettings = normalizePetChatSettings(config.petChat)
   config.petChat = chatSettings
 
-  // 视觉(看屏幕)已启用时,主动聊天交给“用户未回复”计时器,
-  // 不再跑这个"无脑定时蹦台词"的循环,避免频繁打扰
-  if (config.vision?.enabled) {
-    chatTimer = null
-    return
-  }
-  // 视觉未启用时:保留本地写死台词兜底(离线陪伴)
+  // 周期闲聊与"看屏幕主动搭话"并存:
+  //  - 本循环按固定间隔产出陪伴台词(AI 优先,未连语音则本地兜底);
+  //  - 视觉的"用户未回复"搭话是另一条独立触发线(见 main.js 的 vision 调度)。
+  // 两者都复用同一气泡,showPetChat 内部会在气泡已显示时跳过,不会撞车。
   if (!chatSettings.enabled || chatSettings.quietMode) {
     chatTimer = null
     return
@@ -617,6 +660,21 @@ export async function initPet(getConfig, saveConfig) {
   }
 
   await loadConfiguredPet()
+
+  // F8:启动时应用好感度时间衰减(基于上次互动时间)。
+  // 用户长时间没开应用,伙伴会"想他";首次回访后重置计时基准。
+  const initConfig = getConfigFn()
+  const lastActive = Number(initConfig.lastActiveAt) || Date.now()
+  const { happiness: decayedHappiness, decayed } = applyHappinessDecay(initConfig.happiness, lastActive)
+  if (decayed > 0) {
+    initConfig.happiness = decayedHappiness
+    saveConfigFn()
+    // 若衰减明显(>=6),用气泡轻提示,强化"被陪伴"的感知
+    if (decayed >= 6) {
+      setTimeout(() => showBubble(`好久不见,我等你好久了~`, { duration: 5000 }), 1500)
+    }
+  }
+
   scheduleNextFrame()
   scheduleAmbientAction(4000)
   startReminderLoop()
@@ -687,6 +745,12 @@ export async function initPet(getConfig, saveConfig) {
 
   window.addEventListener(PET_EVENTS.PET_ACTION, (event) => {
     if (typeof event.detail === 'string') playAction(event.detail)
+  })
+
+  // F8:用户主动发言 → 加少量好感(带每日上限,见 bumpHappiness)
+  window.addEventListener(PET_EVENTS.PET_USER_MESSAGE, () => {
+    markInteraction()
+    bumpHappiness('chat')
   })
 
   window.addEventListener(PET_EVENTS.PET_EMOTE, (event) => {
@@ -762,6 +826,7 @@ export async function initPet(getConfig, saveConfig) {
 
   widget.addEventListener('click', () => {
     markInteraction()
+    bumpHappiness('interact') // F8:点击伙伴加少量好感(带每日上限)
     // 若语音输入栏被隐藏(如刚按过 Esc),单击先把它唤回来,不挥手
     const voiceBar = document.getElementById('pet-voice-bar')
     if (voiceBar?.classList.contains('hidden')) {

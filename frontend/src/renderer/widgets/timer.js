@@ -13,6 +13,29 @@ let timerState = {
   remaining: 0
 }
 
+// F5:秒表计次(laps)与暂停态累计时长(elapsed)持久化到 config,重启不丢。
+// 番茄钟运行中状态不持久化(跨重启继续倒计时易错,重启重置更合理)。
+function persistStopwatch() {
+  const config = getConfigFn()
+  if (!config.widgets?.timer) return
+  config.widgets.timer.laps = timerState.laps.slice()
+  config.widgets.timer.elapsed = timerState.elapsed
+  saveConfigFn()
+}
+
+function renderSavedLaps() {
+  const lapsEl = document.getElementById('timer-laps')
+  if (!lapsEl) return
+  lapsEl.innerHTML = ''
+  // laps 按记录顺序存储,展示时倒序(最新在上)
+  for (let i = timerState.laps.length - 1; i >= 0; i--) {
+    const item = document.createElement('div')
+    item.className = 'lap-item'
+    item.innerHTML = `<span>#${i + 1}</span><span>${formatTime(timerState.laps[i])}</span>`
+    lapsEl.appendChild(item)
+  }
+}
+
 let getConfigFn = null
 let saveConfigFn = null
 
@@ -140,6 +163,14 @@ function resetTimer() {
   cancelAnimationFrame(timerState.rafId)
   window.dispatchEvent(new CustomEvent(PET_EVENTS.POMODORO_STOP))
 
+  // F5:重置时同步清空持久化的秒表数据
+  const config = getConfigFn()
+  if (config.widgets?.timer) {
+    config.widgets.timer.elapsed = 0
+    config.widgets.timer.laps = []
+    saveConfigFn()
+  }
+
   if (timerState.mode === 'pomodoro') {
     const timerSettings = getConfigFn().widgets.timer
     timerState.phase = 'work'
@@ -193,9 +224,14 @@ export function initTimer(getConfig, saveConfig) {
   const config = getConfigFn()
   const timerSettings = config.widgets.timer
   timerState.mode = timerSettings.mode || 'stopwatch'
-  
+
   if (timerState.mode === 'pomodoro') {
     timerState.remaining = (timerSettings.workTime || 25) * 60 * 1000
+  } else {
+    // F5:恢复秒表的累计时长与计次记录(仅秒表模式)
+    timerState.elapsed = Number(timerSettings.elapsed) || 0
+    timerState.laps = Array.isArray(timerSettings.laps) ? timerSettings.laps.slice() : []
+    renderSavedLaps()
   }
 
   startBtn.addEventListener('click', (e) => {
@@ -217,6 +253,7 @@ export function initTimer(getConfig, saveConfig) {
       }
       if (timerState.mode === 'stopwatch') {
         timerState.elapsed += performance.now() - timerState.startTime
+        persistStopwatch() // F5:暂停时保存累计时长
       } else {
         timerState.remaining -= performance.now() - timerState.startTime
       }
@@ -239,6 +276,7 @@ export function initTimer(getConfig, saveConfig) {
       item.className = 'lap-item'
       item.innerHTML = `<span>#${timerState.laps.length}</span><span>${formatTime(current)}</span>`
       lapsEl.prepend(item)
+      persistStopwatch()
     } else {
       // Pomodoro Skip
       if (await showConfirm(`跳过当前的${timerState.phase === 'work' ? '专注' : '休息'}阶段？`)) {

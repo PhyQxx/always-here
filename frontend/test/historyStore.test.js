@@ -47,3 +47,32 @@ test('history store ignores empty text and preserves every rotated archive', (t)
   assert.match(store.findLatest().text, /cccc/)
   assert.deepEqual(store.list({ limit: 2 }).map((record) => record.text), ['b'.repeat(180), 'c'.repeat(180)])
 })
+
+test('history store clear() removes all records when no category given', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'always-here-history-'))
+  const file = path.join(dir, 'history.jsonl')
+  const store = createHistoryStore(file)
+  store.append({ category: 'conversation', role: 'user', text: 'hello' })
+  store.append({ category: 'vision', text: 'screen content' })
+  assert.equal(store.list().length, 2)
+
+  const removed = store.clear()
+  assert.ok(removed >= 2)
+  assert.equal(store.list().length, 0)
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test('history store clear(category) removes only matching records', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'always-here-history-'))
+  const file = path.join(dir, 'history.jsonl')
+  const store = createHistoryStore(file)
+  store.append({ category: 'conversation', role: 'user', text: 'keep me' })
+  store.append({ category: 'vision', text: 'delete me' })
+
+  const removed = store.clear('vision')
+  assert.equal(removed, 1)
+  const remaining = store.list()
+  assert.equal(remaining.length, 1)
+  assert.equal(remaining[0].category, 'conversation')
+  fs.rmSync(dir, { recursive: true, force: true })
+})

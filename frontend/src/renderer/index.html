@@ -120,7 +120,10 @@
       <!-- Clock Tab -->
       <div class="settings-tab-content" data-tab-content="clock">
         <div class="settings-section-title" data-settings-scope="clock">时钟设置</div>
-        <div class="setting-row empty-state" data-settings-scope="clock">暂无特定设置</div>
+        <div class="setting-grid">
+          <div class="setting-row" data-settings-scope="clock"><label><input type="checkbox" id="setting-clock-seconds" checked> 显示秒</label></div>
+          <div class="setting-row" data-settings-scope="clock"><label><input type="checkbox" id="setting-clock-24h" checked> 24 小时制</label></div>
+        </div>
       </div>
 
       <!-- Pet Tab -->

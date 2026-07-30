@@ -8,6 +8,10 @@ let saveConfigFn = null
 let updateInterval = null
 let domRefs = {}
 
+// F7:今天是否工作日的缓存(避免每秒 updateWageman 都查节假日接口)。
+// null=未知(按周一~周五兜底),true/false=已用节假日数据判定。
+let todayIsWorkday = null
+
 function countWorkdays(year, month) {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   let count = 0
@@ -41,6 +45,25 @@ async function fetchHolidayWorkdays(year, month) {
   }
 }
 
+// F7:根据节假日数据判断"今天"是否工作日。
+// info.holiday===true 表示法定假/调休放假;===false 表示周末调休补班。
+// 无数据时按周一~周五兜底。结果缓存到 todayIsWorkday。
+async function checkTodayWorkday(now = new Date()) {
+  const month = now.getMonth() // 0-based
+  const key = `${month + 1}-${now.getDate()}`
+  try {
+    const data = await window.alwaysHere.fetchHolidays(now.getFullYear())
+    if (data && data.holiday && data.holiday[key]) {
+      todayIsWorkday = !data.holiday[key].holiday
+      return
+    }
+  } catch {
+    // 接口失败,走兜底
+  }
+  const dow = now.getDay()
+  todayIsWorkday = dow !== 0 && dow !== 6
+}
+
 function updateWageman() {
   const config = getConfigFn()
   const wc = config.wageman || {}
@@ -54,7 +77,8 @@ function updateWageman() {
     clockOut,
     monthlySalary,
     workDays,
-    offWorkStops: wc.offWorkStops || {}
+    offWorkStops: wc.offWorkStops || {},
+    isWorkday: todayIsWorkday
   })
 
   const today = dayKey(now)
@@ -67,6 +91,12 @@ function updateWageman() {
 
   if (state.mode === 'missing') {
     statusEl.textContent = '请先设置上班信息'
+  } else if (state.mode === 'rest' && !workStarted) {
+    // F7:今天非工作日且尚未手动开始上班 → 提示休息
+    statusEl.textContent = '今天休息'
+    countdownEl.textContent = '好好放松一下'
+    earnedEl.textContent = state.earnedText
+    return
   } else if (workStopped) {
     statusEl.textContent = '今日已收工'
   } else if (!workStarted) {
@@ -139,6 +169,18 @@ export async function initWageman(getConfig, saveConfig) {
     }))
   }
 
+  // F7:初始化时判定今天是否工作日,用于"今天休息"提示。
+  // 每天 0 点重判一次(跨天/节假日切换)。
+  await checkTodayWorkday()
+  let lastWorkdayCheckDay = new Date().getDate()
+  setInterval(() => {
+    const today = new Date().getDate()
+    if (today !== lastWorkdayCheckDay) {
+      lastWorkdayCheckDay = today
+      checkTodayWorkday()
+    }
+  }, 60 * 1000)
+
   const stopBtn = document.getElementById('wageman-stop')
   const startBtn = document.getElementById('wageman-start')
 
@@ -169,7 +211,8 @@ export async function initWageman(getConfig, saveConfig) {
       clockOut: wc.clockOut,
       monthlySalary: wc.monthlySalary,
       workDays: wc.workDays,
-      offWorkStops: wc.offWorkStops || {}
+      offWorkStops: wc.offWorkStops || {},
+      isWorkday: todayIsWorkday
     })
     wc.offWorkStops[today] = now.toISOString()
     const entry = {

@@ -259,6 +259,8 @@ async function sendText(text) {
   // P1-1:检测到便签相关意图时,把便签内容附带进去,让 AI 能回答"先做什么"
   const textToSend = enrichWithNoteContext(trimmed)
   await window.alwaysHere.voiceSendText(textToSend)
+  // F8:通知 pet.js 用户主动发言了一次,加少量好感(带每日上限)
+  window.dispatchEvent(new CustomEvent(PET_EVENTS.PET_USER_MESSAGE))
 }
 
 // 便签意图检测:用户问"先做什么/待办/该干嘛"时,把便签内容拼进 prompt
@@ -385,6 +387,30 @@ let micAudioCtx = null
 let micWorkletNode = null
 let micPcmChunks = [] // 采集到的 Float32 样本
 
+// F2:录音硬上限。避免用户点了麦克风忘了结束导致 micPcmChunks 无限增长。
+const MAX_RECORD_MS = 60 * 1000
+let recordTimeoutTimer = null
+
+// F3:简易 VAD(静音检测自动结束)。检测到能量低于阈值持续超过 SILENCE_TIMEOUT_MS,
+// 且已录到过有效语音(避免一开始就静音直接结束),则自动提交。
+// 阈值按 RMS 能量经验值,环境噪音经 noiseSuppression 处理后通常低于此值。
+const VAD_ENERGY_THRESHOLD = 0.012
+const VAD_SILENCE_TIMEOUT_MS = 1500
+let vadLastVoiceAt = 0
+let vadEverHeardVoice = false
+let vadCheckTimer = null
+
+function computeRms(samples) {
+  let sum = 0
+  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i]
+  return Math.sqrt(sum / samples.length)
+}
+
+function clearRecordTimers() {
+  if (recordTimeoutTimer) { clearTimeout(recordTimeoutTimer); recordTimeoutTimer = null }
+  if (vadCheckTimer) { clearInterval(vadCheckTimer); vadCheckTimer = null }
+}
+
 async function startListening() {
   // 小智正在说话时,先打断
   await interruptSpeaking()
@@ -417,8 +443,13 @@ async function startListening() {
   })
   micWorkletNode.port.onmessage = (event) => {
     if (!listening) return
-    // worklet 已拷贝,直接收集(event.data 是 Float32Array)
-    micPcmChunks.push(event.data)
+    const samples = event.data
+    micPcmChunks.push(samples)
+    // F3 VAD:更新"最后听到声音"时间戳(能量高于阈值视为有声)
+    if (computeRms(samples) > VAD_ENERGY_THRESHOLD) {
+      vadLastVoiceAt = Date.now()
+      vadEverHeardVoice = true
+    }
   }
   source.connect(micWorkletNode)
   micWorkletNode.connect(micAudioCtx.destination)
@@ -429,14 +460,35 @@ async function startListening() {
   }
 
   listening = true
+  vadLastVoiceAt = Date.now()
+  vadEverHeardVoice = false
   micBtn?.classList.add('listening')
   setPetAnimation(VOICE_PHASE_ANIMATION.listening)
-  showVoiceBubble('🎤 在说呢,我听着~(再点结束)', { persistent: true })
+  showVoiceBubble('🎤 在说呢,说完会自动结束(或再点结束)', { persistent: true })
+
+  // F2:硬超时,到点强制结束
+  recordTimeoutTimer = setTimeout(() => {
+    if (listening) {
+      console.warn('[voice] 录音达到 60 秒上限,自动结束')
+      stopListening()
+    }
+  }, MAX_RECORD_MS)
+
+  // F3:每 200ms 检查一次静音。已录到语音后,连续静音超过阈值则自动提交。
+  vadCheckTimer = setInterval(() => {
+    if (!listening) return
+    if (!vadEverHeardVoice) return // 还没开始说话,不触发(给用户思考时间)
+    if (Date.now() - vadLastVoiceAt >= VAD_SILENCE_TIMEOUT_MS) {
+      stopListening()
+    }
+  }, 200)
 }
 
 async function stopListening() {
+  if (!listening) return
   listening = false
   micBtn?.classList.remove('listening')
+  clearRecordTimers()
 
   // 通知 worklet 停止上报,再断开节点
   if (micWorkletNode) {

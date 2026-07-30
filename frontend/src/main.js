@@ -76,6 +76,7 @@ const DEFAULT_CONFIG = {
     inactivitySeconds: 20      // 用户多久没有发消息后看屏幕并主动搭话,0=关闭
   },
   happiness: 70,
+  lastActiveAt: null, // F8:上次与伙伴互动的时间戳(毫秒),用于好感度衰减
   noteText: '',
   noteTranslucent: false,
   wageman: {
@@ -701,18 +702,8 @@ ipcMain.handle('conversation-clear', async () => {
   }
 })
 
-// 视觉(屏幕观察)记录:查看 / 清空
-// 隐私敏感数据,允许用户查看与删除。
-function getVisionHistory({ days = 7, limit = 200 } = {}) {
-  const numericDays = days === 'all' ? null : Math.max(1, Number(days) || 7)
-  const since = numericDays ? new Date(Date.now() - numericDays * 86400000).toISOString() : null
-  return historyStore.list({
-    predicate: (record) => record.category === 'vision',
-    since,
-    limit: Math.min(Math.max(Number(limit) || 200, 1), 1000)
-  })
-}
-
+// 视觉(屏幕观察)记录:查看 / 清空(隐私敏感数据,允许用户查看与删除)
+// 复用下方 work-report 用的 getVisionHistory(函数声明提升,此处可提前引用)。
 ipcMain.handle('vision-history', async (_, options = {}) => {
   try {
     return { ok: true, entries: getVisionHistory(options) }

@@ -27,6 +27,9 @@ export const PET_EVENTS = Object.freeze({
   PET_VOICE_SHOW_BAR: 'pet-voice-show-bar',
   PET_VOICE_SYSTEM_PROMPT: 'pet-voice-system-prompt',
 
+  // ── 用户主动发言(petVoice → pet)用于加好感 ──
+  PET_USER_MESSAGE: 'pet-user-message',
+
   // ── 设置变更(settings → 各 widget) ──
   PET_SELECTION_CHANGED: 'pet-selection-changed',
   REMINDER_SETTINGS_CHANGED: 'reminder-settings-changed',

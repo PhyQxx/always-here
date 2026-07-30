@@ -29,7 +29,7 @@ async function init() {
   applyAll()
   initClickThrough()
 
-  await safeInit('clock', () => initClock())
+  await safeInit('clock', () => initClock(getConfig))
   await safeInit('pet', () => initPet(getConfig, saveConfig))
   await safeInit('petVoice', () => initPetVoice(getConfig, saveConfig))
   await safeInit('timer', () => initTimer(getConfig, saveConfig))

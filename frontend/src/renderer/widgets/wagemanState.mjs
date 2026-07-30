@@ -28,13 +28,42 @@ export function getWagemanState(options) {
     return { mode: 'missing', showStopButton: false, countdownText: '--:--:--', earnedText: '¥0.00' }
   }
 
+  // F7:今天非工作日(周末/节假日)时提示休息,不计薪资。
+  // 调用方根据节假日数据判断后传入 isWorkday;不传视为工作日(兼容旧行为)。
+  if (options.isWorkday === false) {
+    return {
+      mode: 'rest',
+      statusText: '今天休息',
+      countdownText: '好好放松一下',
+      earnedText: '¥0.00',
+      showStopButton: false,
+      dayKey: dayKey(now)
+    }
+  }
+
   const start = todayFromTime(now, clockIn)
   const end = todayFromTime(now, clockOut)
-  const totalMs = end - start
+  const overnight = end <= start // 夜班:下班时间 ≤ 上班时间(跨越午夜)
+  // F7:夜班时 totalMs = end - start 为负,补一天得到正确工时
+  let totalMs = end - start
+  if (totalMs <= 0) totalMs += 24 * 60 * 60 * 1000
   const days = parseFloat(workDays) || 22
   const dailySalary = parseFloat(monthlySalary) / days
 
-  if (now < start) {
+  // 判断 now 处于哪个区间。白班与夜班的"上班中/已下班"边界不同:
+  //  - 白班:上班中 = [start, end);已下班 = now ≥ end;未上班 = now < start
+  //  - 夜班:上班中 = now ≥ start 或 now < end(跨越午夜);已下班 = [end, start)
+  //             夜班不存在"未上班"态(now < start 算上班中)
+  let phase // 'before' | 'working' | 'after'
+  if (overnight) {
+    phase = (now >= start || now < end) ? 'working' : 'after'
+  } else {
+    if (now < start) phase = 'before'
+    else if (now < end) phase = 'working'
+    else phase = 'after'
+  }
+
+  if (phase === 'before') {
     return {
       mode: 'before',
       statusText: '还没上班呢',
@@ -44,14 +73,17 @@ export function getWagemanState(options) {
     }
   }
 
-  if (now < end) {
-    const elapsed = now - start
+  if (phase === 'working') {
+    // 夜班跨午夜时,elapsed 需处理"now 在午夜后"的情况(now < start,实际从昨日 start 起算)
+    const elapsedMs = overnight && now < start
+      ? (totalMs - (end - now))   // 已工作 = 总工时 - 距下班剩余
+      : (now - start)
     const perMs = dailySalary / totalMs
     return {
       mode: 'working',
       statusText: '搬砖中...',
       countdownText: formatDuration(end - now),
-      earnedText: `¥${(elapsed * perMs).toFixed(2)}`,
+      earnedText: `¥${(elapsedMs * perMs).toFixed(2)}`,
       showStopButton: false
     }
   }
