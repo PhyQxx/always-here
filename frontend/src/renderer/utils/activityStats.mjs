@@ -65,6 +65,7 @@ export function summarizeActivityLog(log = []) {
   }
   let workStops = 0
   let totalOvertimeMs = 0
+  let pomodoroDone = 0 // T1:今日(或区间内)番茄钟完成数
 
   for (const entry of Array.isArray(log) ? log : []) {
     if (entry.type === 'reminder-response' && REMINDER_TYPES.includes(entry.reminderType)) {
@@ -76,13 +77,17 @@ export function summarizeActivityLog(log = []) {
       workStops += 1
       totalOvertimeMs += getWorkStopOvertimeMs(entry)
     }
+    if (entry.type === 'pomodoro-done') {
+      pomodoroDone += 1
+    }
   }
 
   return {
     total: Array.isArray(log) ? log.length : 0,
     reminders,
     workStops,
-    totalOvertimeMs
+    totalOvertimeMs,
+    pomodoroDone
   }
 }
 
@@ -107,7 +112,8 @@ export function summarizeRecentDays(log = [], days = 7, now = new Date()) {
     sedentaryDone: stats.reminders.sedentary.done,
     sedentaryMissed,
     workStops: stats.workStops,
-    totalOvertimeMs: stats.totalOvertimeMs
+    totalOvertimeMs: stats.totalOvertimeMs,
+    pomodoroDone: stats.pomodoroDone
   }
 }
 

@@ -36,6 +36,12 @@ import {
 } from './petChatter.mjs'
 import { appendActivityLog } from '../utils/activityLog.mjs'
 import { summarizeRecentDays } from '../utils/activityStats.mjs'
+import {
+  shouldShowDailyRecap,
+  buildRecapPrompt,
+  buildLocalRecap,
+  recapDateKey
+} from './petDailyRecap.mjs'
 import { PET_EVENTS } from '../utils/events.mjs'
 
 const CANVAS_WIDTH = 130
@@ -607,6 +613,28 @@ async function tryAiChat(prompt) {
   }
 }
 
+// T1:今日回顾。每天首次下班或晚上 20:00 后首次互动时触发,一天一次。
+// 语音已启用 → 走 AI 生成个性化回顾;否则用本地模板气泡。
+async function tryDailyRecap(trigger) {
+  const config = getConfigFn()
+  if (!shouldShowDailyRecap(config, trigger)) return
+  // 标记今天已回顾(无论 AI 是否成功,避免反复触发)
+  config.lastRecapDate = recapDateKey()
+  saveConfigFn()
+
+  // 安静模式下只走本地气泡(不打扰 AI),但仍算"已回顾"
+  if (config.voice?.enabled && !config.petChat?.quietMode) {
+    const prompt = buildRecapPrompt(config)
+    if (prompt && await tryAiChat(prompt)) {
+      if (currentAnimation === 'idle') playAction('review')
+      return
+    }
+    // AI 不可用 → 回落本地模板
+  }
+  showBubble(buildLocalRecap(config), { duration: 8000 })
+  if (currentAnimation === 'idle') playAction('waving')
+}
+
 function startPetChatLoop() {
   if (chatTimer) clearInterval(chatTimer)
   const config = getConfigFn()
@@ -693,7 +721,22 @@ export async function initPet(getConfig, saveConfig) {
   startReminderLoop()
   startPetChatLoop()
   if (idleStateTimer) clearInterval(idleStateTimer)
-  idleStateTimer = setInterval(evaluateIdleState, 30000)
+  idleStateTimer = setInterval(() => {
+    evaluateIdleState()
+    // T1:晚上 20:00 后,若当天还没回顾过,触发今日回顾(给不上班的人兜底)
+    // 复用 30 秒间隔,无需单独定时器
+    tryDailyRecap('scheduled')
+  }, 30000)
+
+  // T3:首次启动引导。新用户第一次见到伙伴,延迟 2 秒弹自我介绍气泡。
+  // 不强行全屏引导,用伙伴自然的方式完成 onboarding。首次打开设置后视为已引导。
+  const initCfg = getConfigFn()
+  if (initCfg.hasOnboarded === false) {
+    setTimeout(() => {
+      showBubble('你好呀!我是你的桌面伙伴。右键我可以打开设置,拖动我能换个位置~', { duration: 9000 })
+      playAction('waving')
+    }, 2000)
+  }
 
   window.addEventListener(PET_EVENTS.PET_SELECTION_CHANGED, async () => {
     markInteraction()
@@ -805,8 +848,10 @@ export async function initPet(getConfig, saveConfig) {
     config.happiness = calculateHappiness(config.happiness, event.detail)
     maybeCelebrateHappiness(previousHappiness, config.happiness)
     saveConfigFn()
-    // 下班 → AI 生成个性化播报(薪资/加班情况)
-    if (config.voice?.enabled) {
+    // T1:下班优先触发今日回顾(一天一次);回顾已做过的则走原来的下班播报
+    if (shouldShowDailyRecap(config, 'work-stop')) {
+      tryDailyRecap('work-stop')
+    } else if (config.voice?.enabled) {
       const w = config.wageman || {}
       const recent = summarizeRecentDays(config.activityLog || [], 7)
       const overtimeHrs = Math.floor(recent.totalOvertimeMs / 3600000)

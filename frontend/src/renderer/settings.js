@@ -84,6 +84,12 @@ export function initSettings(getConfig, saveConfig) {
   })
 
   function showPanel(mode = { type: 'global' }) {
+    // T3:用户首次打开设置 → 标记已完成引导,不再弹欢迎气泡
+    const config = getConfig()
+    if (config.hasOnboarded === false) {
+      config.hasOnboarded = true
+      saveConfig()
+    }
     if (title) title.textContent = getSettingsTitle(mode)
     if (summary) summary.textContent = getSettingsModeSummary(mode)
     // Always show tabs, "Back to Global" is now redundant but kept for layout consistency if needed

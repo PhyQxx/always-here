@@ -77,6 +77,8 @@ const DEFAULT_CONFIG = {
   },
   happiness: 70,
   lastActiveAt: null, // F8:上次与伙伴互动的时间戳(毫秒),用于好感度衰减
+  lastRecapDate: null, // T1:上次今日回顾的日期 key(YYYY-M-D),一天最多一次
+  hasOnboarded: false, // T3:是否完成首启引导(首次打开设置后置 true)
   noteText: '',
   noteTranslucent: false,
   wageman: {

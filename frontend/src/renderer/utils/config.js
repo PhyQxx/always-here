@@ -4,6 +4,7 @@ import { normalizeVoiceSettings } from '../widgets/voiceSettings.mjs'
 import { normalizeVisionSettings } from '../widgets/voiceSettings.mjs'
 import { normalizeReminders } from '../widgets/petReminders.mjs'
 import { PET_EVENTS } from './events.mjs'
+import { pickLayoutForScreen } from './widgetLayouts.mjs'
 
 let config = null
 
@@ -24,6 +25,23 @@ export async function initConfig() {
 
   for (const key in DEFAULT_WIDGETS) {
     config.widgets[key] = { ...DEFAULT_WIDGETS[key], ...(config.widgets[key] || {}) }
+  }
+
+  // T4:首启时按屏幕宽度选择合适的默认布局,避免小屏坐标溢出/拥挤。
+  // 仅在未完成引导(首启)且能拿到屏幕尺寸时应用;之后以用户拖动后的坐标为准。
+  if (config.hasOnboarded === false) {
+    try {
+      const size = await window.alwaysHere.getScreenSize()
+      const layout = pickLayoutForScreen(size?.width)
+      for (const key in layout) {
+        if (config.widgets[key]) {
+          config.widgets[key].x = layout[key].x
+          config.widgets[key].y = layout[key].y
+        }
+      }
+    } catch {
+      // 拿不到屏幕尺寸时沿用 DEFAULT_WIDGETS 默认坐标(有视口 clamp 兜底)
+    }
   }
   const legacyThemes = {
     dark: 'ambient',
