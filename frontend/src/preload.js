@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('alwaysHere', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   checkHotUpdate: () => ipcRenderer.invoke('check-hot-update'),
   resetConfig: () => ipcRenderer.invoke('reset-config'),
+  exportAllData: () => ipcRenderer.invoke('export-all-data'),
+  importAllData: () => ipcRenderer.invoke('import-all-data'),
   openPetFolder: (petId) => ipcRenderer.invoke('open-pet-folder', petId),
   deletePet: (petId) => ipcRenderer.invoke('delete-pet', petId),
   // ── 语音 / 小智对话 ──

@@ -35,3 +35,34 @@ export function pickLayoutForScreen(width) {
 
 // 暴露常量供 T6(预设布局模式)复用
 export const LAYOUTS = { WIDE_LAYOUT, COMPACT_LAYOUT, WIDE_BREAKPOINT }
+
+// T6:预设布局模式 —— 批量设置哪些 widget 启用,降低用户逐个开关的认知负担。
+// 坐标沿用 applyWidgetPositions 的视口 clamp,无需在此指定位置。
+// 极简:只留时钟 + 伙伴(最小打扰,适合专注)
+// 办公:时钟 + 便签 + 打工(实用三件套,去掉秒表和伙伴的频繁打扰)
+// 全能:全部启用(默认体验)
+export const PRESET_MODES = {
+  minimal: {
+    label: '极简',
+    description: '时钟 + 伙伴,最小打扰',
+    enabled: { clock: true, pet: true, timer: false, note: false, wageman: false }
+  },
+  office: {
+    label: '办公',
+    description: '时钟 + 便签 + 打工,实用三件套',
+    enabled: { clock: true, pet: false, timer: false, note: true, wageman: true }
+  },
+  full: {
+    label: '全能',
+    description: '全部启用',
+    enabled: { clock: true, pet: true, timer: true, note: true, wageman: true }
+  }
+}
+
+// 应用预设:返回应写入 config.widgets[key].enabled 的映射。
+// 纯函数,不直接改 config,由调用方落盘 + applyWidgetPositions。
+export function applyPresetMode(presetId) {
+  const preset = PRESET_MODES[presetId]
+  if (!preset) return null
+  return { ...preset.enabled }
+}

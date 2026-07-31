@@ -20,6 +20,7 @@ import { normalizeReminders } from './widgets/petReminders.mjs'
 import { showToast, showConfirm } from './utils/ui.mjs'
 import { renderMarkdown } from './utils/markdown.mjs'
 import { PET_EVENTS } from './utils/events.mjs'
+import { applyPresetMode } from './utils/widgetLayouts.mjs'
 
 export function initSettings(getConfig, saveConfig) {
   const panel = document.getElementById('settings-panel')
@@ -67,6 +68,34 @@ export function initSettings(getConfig, saveConfig) {
       }, 1000)
     } else {
       showToast('恢复默认配置失败', 'error')
+    }
+  })
+
+  // T5:数据导出/导入
+  const exportDataBtn = document.getElementById('export-data-btn')
+  const importDataBtn = document.getElementById('import-data-btn')
+  exportDataBtn?.addEventListener('click', async () => {
+    exportDataBtn.disabled = true
+    const result = await window.alwaysHere.exportAllData()
+    exportDataBtn.disabled = false
+    if (result?.canceled) return
+    if (result?.ok) {
+      showToast(`已导出到:${result.path}`, 'success', 5000)
+    } else {
+      showToast(result?.error || '导出失败', 'error')
+    }
+  })
+  importDataBtn?.addEventListener('click', async () => {
+    if (!await showConfirm('导入会覆盖当前所有数据(设置、好感度、对话、观察记录),确定继续吗？')) return
+    importDataBtn.disabled = true
+    const result = await window.alwaysHere.importAllData()
+    importDataBtn.disabled = false
+    if (result?.canceled) return
+    if (result?.ok) {
+      showToast('导入成功,正在重启...', 'success')
+      setTimeout(() => window.location.reload(), 1200)
+    } else {
+      showToast(result?.error || '导入失败', 'error')
     }
   })
 
@@ -292,6 +321,11 @@ export function initSettings(getConfig, saveConfig) {
 
     downloadLink?.addEventListener('click', (event) => {
       event.preventDefault()
+      window.alwaysHere.openExternal?.('https://codex-pets.net/')
+    })
+
+    // T7:伙伴商店按钮(前置入口,比小链接更显眼)
+    document.getElementById('pet-store-btn')?.addEventListener('click', () => {
       window.alwaysHere.openExternal?.('https://codex-pets.net/')
     })
 
@@ -1019,6 +1053,23 @@ export function initSettings(getConfig, saveConfig) {
       getConfig().widgets[key].enabled = check.checked
       applyWidgetPositions()
       saveConfig()
+    })
+  })
+
+  // T6:预设布局按钮(极简/办公/全能),批量切换可见组件
+  document.querySelectorAll('[data-preset]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const enabled = applyPresetMode(btn.dataset.preset)
+      if (!enabled) return
+      const config = getConfig()
+      for (const key of widgetKeys) {
+        if (config.widgets[key]) config.widgets[key].enabled = Boolean(enabled[key])
+        const check = document.getElementById('setting-' + key)
+        if (check) check.checked = Boolean(enabled[key])
+      }
+      applyWidgetPositions()
+      await saveConfig()
+      showToast(`已切换到「${btn.textContent}」布局`, 'success')
     })
   })
 

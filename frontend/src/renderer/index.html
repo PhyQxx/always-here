@@ -107,6 +107,12 @@
     <div class="settings-body">
       <!-- Visibility Tab -->
       <div class="settings-tab-content active" data-tab-content="components">
+        <div class="settings-section-title" data-settings-scope="always">快速布局</div>
+        <div class="setting-row" data-settings-scope="always">
+          <button type="button" class="btn-block" data-preset="minimal">极简</button>
+          <button type="button" class="btn-block" data-preset="office">办公</button>
+          <button type="button" class="btn-block" data-preset="full">全能</button>
+        </div>
         <div class="settings-section-title" data-settings-scope="always">可见组件</div>
         <div class="settings-grid">
           <div class="setting-row" data-settings-scope="clock"><label><input type="checkbox" id="setting-clock" checked> 时钟</label></div>
@@ -129,6 +135,12 @@
       <!-- Pet Tab -->
       <div class="settings-tab-content" data-tab-content="pet">
         <div class="settings-section-title" data-settings-scope="pet">伙伴管理器</div>
+        <div class="setting-row" data-settings-scope="pet">
+          <span>想要更多伙伴?去商店下载素材包,导入即可使用。</span>
+        </div>
+        <div class="setting-row" data-settings-scope="pet">
+          <button type="button" id="pet-store-btn" class="btn-primary">🌐 去伙伴商店</button>
+        </div>
         <div class="pet-manager-list" id="pet-manager-list" data-settings-scope="pet"></div>
 
         <div class="settings-section-title" data-settings-scope="pet">库设置</div>
@@ -411,6 +423,15 @@
             <button id="check-update-btn" class="btn-primary">检查更新</button>
             <button id="reset-config-btn" class="btn-primary danger-red">恢复默认</button>
           </div>
+        </div>
+
+        <div class="settings-section-title" data-settings-scope="global">数据管理</div>
+        <div class="setting-row" data-settings-scope="global">
+          <span>导出我的数据(含设置、好感度、对话与屏幕观察记录),换机不丢失。</span>
+        </div>
+        <div class="setting-row" data-settings-scope="global">
+          <button id="export-data-btn" class="btn-primary">导出数据</button>
+          <button id="import-data-btn" class="btn-block">导入数据(覆盖现有)</button>
         </div>
       </div>
 

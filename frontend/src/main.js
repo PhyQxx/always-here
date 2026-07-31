@@ -353,6 +353,72 @@ ipcMain.handle('reset-config', () => {
   }
 })
 
+// T5:数据导出/导入(换机迁移)。打包 config + 全部 history 为单个 JSON 文件。
+// 导入会覆盖现有数据,故需用户二次确认(由渲染进程 showConfirm 处理)。
+ipcMain.handle('export-all-data', async () => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '导出我的数据',
+      defaultPath: `always-here-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'Always Here 备份', extensions: ['json'] }]
+    })
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true }
+
+    // 读取 config(当前内存值优先,否则读磁盘)
+    const config = loadConfig()
+    // 读取全部 history(含归档,limit 设大保证全量)
+    const history = historyStore.list({ limit: 100000 })
+
+    const backup = {
+      appVersion: app.getVersion(),
+      exportedAt: new Date().toISOString(),
+      config,
+      history
+    }
+    fs.writeFileSync(result.filePath, JSON.stringify(backup, null, 2), 'utf8')
+    return { ok: true, path: result.filePath }
+  } catch (e) {
+    return { ok: false, error: e.message || '导出失败' }
+  }
+})
+
+ipcMain.handle('import-all-data', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '导入数据(将覆盖现有)',
+      filters: [{ name: 'Always Here 备份', extensions: ['json'] }],
+      properties: ['openFile']
+    })
+    if (result.canceled || !result.filePaths.length) return { ok: false, canceled: true }
+
+    const raw = fs.readFileSync(result.filePaths[0], 'utf8')
+    const backup = JSON.parse(raw)
+    if (!backup || typeof backup !== 'object' || !backup.config) {
+      return { ok: false, error: '备份文件格式无效' }
+    }
+
+    // 覆盖 config
+    saveConfig(backup.config)
+    // 覆盖 history:先全量清空,再逐条写入(保留归档滚动机制)
+    historyStore.clear()
+    if (Array.isArray(backup.history)) {
+      for (const record of backup.history) {
+        historyStore.append({
+          category: record.category,
+          role: record.role,
+          source: record.source,
+          text: record.text,
+          // 保留原始时间戳(append 默认用当前时间,这里覆盖)
+          timestamp: record.timestamp
+        })
+      }
+    }
+    return { ok: true, message: '导入成功,重启应用后完全生效' }
+  } catch (e) {
+    return { ok: false, error: e.message || '导入失败' }
+  }
+})
+
 ipcMain.handle('check-hot-update', async () => {
   if (!app.isPackaged) return { error: '开发环境不支持热更新' }
   try {
