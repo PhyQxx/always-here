@@ -1104,6 +1104,49 @@ export function initSettings(getConfig, saveConfig) {
     saveConfig()
   })
 
+  // T9:挂件所在屏幕选择(多显示器)
+  const displaySelect = document.getElementById('setting-display')
+  if (displaySelect) {
+    ;(async () => {
+      let displays = []
+      try {
+        displays = await window.alwaysHere.listDisplays()
+      } catch {
+        displays = []
+      }
+      // 填充选项:主屏放第一个,值为 id 字符串(select value 只能存字符串)
+      const config = getConfig()
+      displaySelect.innerHTML = ''
+      for (const d of displays) {
+        const opt = document.createElement('option')
+        opt.value = String(d.id)
+        opt.textContent = d.label
+        displaySelect.appendChild(opt)
+      }
+      // 若无副屏,显示提示并禁用(避免误导)
+      if (displays.length <= 1) {
+        displaySelect.innerHTML = '<option value="">仅检测到一块屏幕</option>'
+        displaySelect.disabled = true
+        return
+      }
+      displaySelect.disabled = false
+      // 选中当前配置的 displayId(未配置则选主屏)
+      const currentId = config.displayId ? String(config.displayId) : String(displays.find(d => d.isPrimary)?.id || displays[0]?.id || '')
+      displaySelect.value = currentId
+      displaySelect.addEventListener('change', async () => {
+        const id = displaySelect.value ? Number(displaySelect.value) : null
+        const result = await window.alwaysHere.setDisplay(id)
+        if (result?.ok) {
+          showToast('已切换屏幕,正在调整布局...', 'success')
+          // 切屏后重新应用布局(clamp 到新屏尺寸)
+          setTimeout(() => window.location.reload(), 800)
+        } else {
+          showToast('切换屏幕失败', 'error')
+        }
+      })
+    })()
+  }
+
   const autoStartCheck = document.getElementById('setting-autoStart')
   window.alwaysHere.getAutoStart().then(enabled => { autoStartCheck.checked = enabled })
   autoStartCheck.addEventListener('change', async (e) => {

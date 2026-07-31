@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('alwaysHere', {
   saveConfig: (config) => ipcRenderer.invoke('save-config', config),
   setClickThrough: (ignore) => ipcRenderer.invoke('set-click-through', ignore),
   getScreenSize: () => ipcRenderer.invoke('get-screen-size'),
+  listDisplays: () => ipcRenderer.invoke('list-displays'),
+  setDisplay: (displayId) => ipcRenderer.invoke('set-display', displayId),
   setAutoStart: (enable) => ipcRenderer.invoke('set-auto-start', enable),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
   listPets: () => ipcRenderer.invoke('list-pets'),

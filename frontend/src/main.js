@@ -45,6 +45,7 @@ const DEFAULT_CONFIG = {
   globalScale: 1.0,
   theme: 'cozy',
   autoStart: false,
+  displayId: null, // T9:挂件所在显示器 id(null=主屏)
   petId: 'hina',
   petFolderPath: CODEX_PETS_DIR,
   reminders: {
@@ -143,15 +144,44 @@ function sendToRenderer(channel, payload, options = {}) {
   mainWindow.webContents.send(channel, payload)
 }
 
+// ── T9:多屏支持 ──
+// 挂件层按 config.displayId 绑定到指定显示器;该屏被拔掉时回退主屏。
+// 返回目标 display 对象(含 bounds),供 createWindow / setBounds 使用。
+function resolveTargetDisplay() {
+  const config = loadConfig()
+  const displays = screen.getAllDisplays()
+  if (config.displayId) {
+    const matched = displays.find((d) => d.id === config.displayId)
+    if (matched) return matched
+    // 配置的屏幕找不到了(被拔掉),回退主屏并清掉无效配置
+    if (config.displayId !== screen.getPrimaryDisplay().id) {
+      config.displayId = null
+      saveConfig(config)
+    }
+  }
+  return screen.getPrimaryDisplay()
+}
+
+// 显示器友好名称:macOS 的 name 可能是 "\\Display0",Windows 是 deviceName。
+// 用"主屏/副屏" + 分辨率 + 序号组合,便于用户辨认。
+function describeDisplay(display, index, total) {
+  const { width, height } = display.bounds
+  const isPrimary = display.id === screen.getPrimaryDisplay().id
+  const role = isPrimary ? '主屏' : (index === 0 ? '副屏' : `屏幕 ${index + 1}`)
+  return `${role} · ${width}×${height}`
+}
+
 function createWindow() {
-  const { width: screenW, height: screenH } = screen.getPrimaryDisplay().workAreaSize
+  // T9:按 config.displayId 选择目标显示器;找不到则回退主屏。
+  const targetDisplay = resolveTargetDisplay()
+  const { x: bx, y: by, width: screenW, height: screenH } = targetDisplay.bounds
   const config = loadConfig()
 
   mainWindow = new BrowserWindow({
     width: screenW,
     height: screenH,
-    x: 0,
-    y: 0,
+    x: bx,
+    y: by,
     transparent: true,
     frame: false,
     resizable: false,
@@ -258,8 +288,38 @@ ipcMain.handle('set-click-through', (_, ignore) => {
   }
 })
 ipcMain.handle('get-screen-size', () => {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
+  // T9:返回当前窗口绑定屏的尺寸(而非写死主屏),保证渲染进程 clamp 正确
+  const display = resolveTargetDisplay()
+  const { width, height } = display.workArea || display.bounds
   return { width, height }
+})
+
+// T9:列举所有显示器,供设置页选择目标屏
+ipcMain.handle('list-displays', () => {
+  const displays = screen.getAllDisplays()
+  const primaryId = screen.getPrimaryDisplay().id
+  return displays.map((d, i) => ({
+    id: d.id,
+    label: describeDisplay(d, i, displays.length),
+    isPrimary: d.id === primaryId,
+    width: d.bounds.width,
+    height: d.bounds.height
+  }))
+})
+
+// T9:切换挂件所在显示器,立即移动窗口到目标屏
+ipcMain.handle('set-display', (_, displayId) => {
+  const displays = screen.getAllDisplays()
+  const target = displayId ? displays.find((d) => d.id === displayId) : null
+  const finalDisplay = target || screen.getPrimaryDisplay()
+  const config = loadConfig()
+  config.displayId = target ? target.id : null
+  saveConfig(config)
+  if (mainWindow) {
+    const { x, y, width, height } = finalDisplay.bounds
+    mainWindow.setBounds({ x, y, width, height })
+  }
+  return { ok: true }
 })
 ipcMain.handle('set-auto-start', (_, enable) => {
   app.setLoginItemSettings({ openAtLogin: enable })
@@ -1259,6 +1319,15 @@ app.whenReady().then(() => {
 
   // 注册全局快捷键唤醒语音对话
   registerVoiceShortcut()
+
+  // T9:显示器插拔监听。目标屏被拔掉时,自动把窗口移回主屏。
+  screen.on('display-removed', () => {
+    const display = resolveTargetDisplay()
+    if (mainWindow) {
+      const { x, y, width, height } = display.bounds
+      mainWindow.setBounds({ x, y, width, height })
+    }
+  })
 
   // 启动“用户未回复”检测(若已启用)。
   const initConfig = loadConfig()
