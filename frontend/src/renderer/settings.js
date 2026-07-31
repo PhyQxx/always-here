@@ -112,6 +112,32 @@ export function initSettings(getConfig, saveConfig) {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab))
   })
 
+  // T8:设置搜索。输入关键词 → 定位到匹配项所在 tab,高亮并滚动到第一个匹配。
+  const searchInput = document.getElementById('settings-search')
+  searchInput?.addEventListener('input', () => {
+    const query = searchInput.value.trim().toLowerCase()
+    // 清除上次高亮
+    panel.querySelectorAll('.setting-row.search-hit').forEach(el => el.classList.remove('search-hit'))
+    if (!query) return
+
+    // 遍历所有 tab-content 下的 setting-row,找第一个文本匹配项
+    for (const content of tabContents) {
+      const rows = content.querySelectorAll('.setting-row')
+      for (const row of rows) {
+        const text = (row.textContent || '').toLowerCase()
+        if (text.includes(query)) {
+          // 切换到该 row 所属的 tab
+          switchTab(content.dataset.tabContent)
+          // 高亮并滚动到可见
+          row.classList.add('search-hit')
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          return
+        }
+      }
+    }
+    // 未匹配:不做任何切换,避免打断用户输入
+  })
+
   function showPanel(mode = { type: 'global' }) {
     // T3:用户首次打开设置 → 标记已完成引导,不再弹欢迎气泡
     const config = getConfig()
